@@ -94,12 +94,12 @@ export default function InteractiveAvatar() {
   try {
     avatar.current = new StreamingAvatar({
       token: newToken,
-      protoPath: '/static/streaming.proto', // This now points to your local file
+      protoPath: '/streaming.proto', // This points to the file in your public directory
     });
     console.log("Avatar initialized successfully");
     
     // Test proto file loading
-    fetch('/static/streaming.proto')
+    fetch('/streaming.proto')
       .then(response => {
         console.log('Proto file fetch status:', response.status);
         return response.text();

@@ -14,19 +14,7 @@ const nextConfig = {
         // We recommend fixing type errors instead.
         ignoreBuildErrors: true,
       },
-      async headers() {
-        return [
-          {
-            source: '/heygen-static/:path*',
-            headers: [
-              { key: 'Access-Control-Allow-Origin', value: '*' },
-              { key: 'Access-Control-Allow-Methods', value: 'GET,OPTIONS' },
-              { key: 'Access-Control-Allow-Headers', value: 'X-Requested-With,content-type' },
-              { key: 'Content-Type', value: 'application/octet-stream' },
-            ],
-          },
-        ];
-      },
+      
   };
   
   module.exports = nextConfig;

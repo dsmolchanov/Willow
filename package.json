@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "node next.config.mjs",
     "build": "next build",
-    "start": "NODE_ENV=production node next.config.mjs",
+    "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
