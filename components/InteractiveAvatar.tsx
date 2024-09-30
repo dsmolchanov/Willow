@@ -43,6 +43,9 @@ export default function InteractiveAvatar() {
 
   const [selectedKnowledgeBase, setSelectedKnowledgeBase] = useState("");
 
+  const heygenStaticUrl = process.env.NEXT_PUBLIC_HEYGEN_STATIC_URL || 'https://static.heygen.ai';
+
+
   async function fetchAccessToken() {
     try {
       const response = await fetch("/api/get-access-token", {
@@ -77,18 +80,19 @@ export default function InteractiveAvatar() {
     setIsLoadingSession(true);
     const newToken = await fetchAccessToken();
 
-    if (!newToken) {
-      setDebug("No access token received. Cannot start avatar session.");
-      setIsLoadingSession(false);
-      return;
-    }
-  
-    console.log("Initializing StreamingAvatar with token.");
-    setDebug("Initializing avatar session...");
+      if (!newToken) {
+    setDebug("No access token received. Cannot start avatar session.");
+    setIsLoadingSession(false);
+    return;
+  }
 
-    avatar.current = new StreamingAvatar({
-      token: newToken,
-    });
+  console.log("Initializing StreamingAvatar with token.");
+  setDebug("Initializing avatar session...");
+
+  avatar.current = new StreamingAvatar({
+    token: newToken,
+    protoPath: `${heygenStaticUrl}/static/streaming.proto`,
+  });
     avatar.current.on(StreamingEvents.AVATAR_START_TALKING, (e) => {
       console.log("Avatar started talking", e);
     });
