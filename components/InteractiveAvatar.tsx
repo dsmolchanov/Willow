@@ -44,6 +44,8 @@ export default function InteractiveAvatar() {
   const [selectedKnowledgeBase, setSelectedKnowledgeBase] = useState("");
 
   const heygenStaticUrl = process.env.NEXT_PUBLIC_HEYGEN_STATIC_URL || 'https://static.heygen.ai';
+  const proxyUrl = '/heygen-static'; // This will be rewritten by Next.js
+
 
 
   async function fetchAccessToken() {
@@ -89,12 +91,12 @@ export default function InteractiveAvatar() {
   console.log("Initializing StreamingAvatar with token.");
   setDebug("Initializing avatar session...");
 
-  console.log('Initializing avatar with proto path:', '/heygen-static/static/streaming.proto');
+  console.log('Initializing avatar with proto path:', '`${proxyUrl}/static/streaming.proto`);
 
 try {
   avatar.current = new StreamingAvatar({
     token: newToken,
-    protoPath: '/heygen-static/static/streaming.proto',
+    protoPath: `${proxyUrl}/static/streaming.proto`,
   });
   console.log("Avatar initialized successfully");
 } catch (error) {
