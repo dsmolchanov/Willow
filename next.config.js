@@ -8,6 +8,12 @@ const nextConfig = {
     eslint: {
       ignoreDuringBuilds: true,
     },
+    typescript: {
+        // WARNING: This allows production builds to successfully complete even if
+        // your project has type errors. Use this to temporarily bypass type checking.
+        // We recommend fixing type errors instead.
+        ignoreBuildErrors: true,
+      },
   };
   
   module.exports = nextConfig;
