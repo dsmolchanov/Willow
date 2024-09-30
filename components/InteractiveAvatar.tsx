@@ -2,7 +2,7 @@ import type { StartAvatarResponse } from "@heygen/streaming-avatar";
 
 import StreamingAvatar, {
   AvatarQuality,
-  StreamingEvents, VoiceEmotion,
+  StreamingEvents, TaskType, VoiceEmotion,
 } from "@heygen/streaming-avatar";
 import {
   Button,
@@ -30,7 +30,7 @@ export default function InteractiveAvatar() {
   const [isLoadingRepeat, setIsLoadingRepeat] = useState(false);
   const [stream, setStream] = useState<MediaStream>();
   const [debug, setDebug] = useState<string>();
-  //const [knowledgeId, setKnowledgeId] = useState<string>("");
+  const [knowledgeId, setKnowledgeId] = useState<string>("");
   const [avatarId, setAvatarId] = useState<string>("");
   const [language, setLanguage] = useState<string>('en');
 
