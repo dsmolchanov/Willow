@@ -91,7 +91,7 @@ export default function InteractiveAvatar() {
   console.log("Initializing StreamingAvatar with token.");
   setDebug("Initializing avatar session...");
 
-  console.log('Initializing avatar with proto path:', '`${proxyUrl}/static/streaming.proto`);
+  console.log('Initializing avatar with proto path:', `${proxyUrl}/static/streaming.proto`);
 
 try {
   avatar.current = new StreamingAvatar({
