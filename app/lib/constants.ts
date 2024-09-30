@@ -1,23 +1,23 @@
 export const AVATARS = [
   {
-    avatar_id: "Eric_public_pro2_20230608",
-    name: "Edward in Blue Shirt",
+    avatar_id: "ef08039a41354ed5a20565db899373f3",
+    name: "Sofia in office",
   },
   {
-    avatar_id: "Tyler-incasualsuit-20220721",
-    name: "Tyler in Casual Suit",
+    avatar_id: "Wayne_20240711",
+    name: "Yakut by the table",
   },
   {
-    avatar_id: "Anna_public_3_20240108",
-    name: "Anna in Brown T-shirt",
+    avatar_id: "cc2984a6003a4d5194eb58a4ad570337",
+    name: "Aram outdoor",
   },
   {
-    avatar_id: "Susan_public_2_20240328",
-    name: "Susan in Black Shirt",
+    avatar_id: "336b72634e644335ad40bd56462fc780",
+    name: "Sofia outdoor",
   },
   {
-    avatar_id: "josh_lite3_20230714",
-    name: "Joshua Heygen CEO",
+    avatar_id: "c20f4bdddbe041ecba98d93444f8b29b4",
+    name: "Angelina in office",
   },
 ];
 
@@ -51,3 +51,17 @@ export const STT_LANGUAGE_LIST = [
   { label: 'Ukrainian', value: 'uk', key: 'uk' },
   { label: 'Vietnamese', value: 'vi', key: 'vi' },
 ];
+
+export const KNOWLEDGE_BASE_IDS = [
+  {
+    id: "a5e88ff0b01e4c54b9490d96bb1414e6",
+    name: "Машина у друга",
+    description: "Привет! Мы с вами будем сегодня решать следующий кейс: Вы дали на некоторое время другу свой старый автомобиль. С течением времени у друга изменились жизненные обстоятельства, машина стала ему жизненно необходима. Когда вы обратился к нему с вопросом о возврате автомобиля, то услышали в ответ: \"Давай попозже обсудим, сейчас он мне нужнее, чем тебе!\"",
+  },
+  {
+    id: "485afa0ccc06470fbd14677ae0ea4551",
+    name: "Обед в бизнес-классе",
+    description: "Привет! Мы с тобой будем сегодня решать следующий кейс: В связи с тем, что пассажирский салон эконом-класса был переполнен, вам предложили полет в бизнес-классе.  Когда наступило время обеда, соседям предложили обед из меню бизнес-класса, а вам принесли из эконом-класса. На ваш вопрос, можно ли доплатить и поесть так же, как соседи, стюардесса ответила:  \"Нет, вам и так сильно повезло\".\n\nЦель 1: договориться поесть еду из бизнес-класса\nЦель 2: конструктивный диалог",
+  },
+];
+

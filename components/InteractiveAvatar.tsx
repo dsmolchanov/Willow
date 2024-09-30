@@ -23,7 +23,7 @@ import { useMemoizedFn, usePrevious } from "ahooks";
 
 import InteractiveAvatarTextInput from "./InteractiveAvatarTextInput";
 
-import {AVATARS, STT_LANGUAGE_LIST} from "@/app/lib/constants";
+import {AVATARS, STT_LANGUAGE_LIST, KNOWLEDGE_BASE_IDS} from "@/app/lib/constants";
 
 export default function InteractiveAvatar() {
   const [isLoadingSession, setIsLoadingSession] = useState(false);
@@ -40,6 +40,9 @@ export default function InteractiveAvatar() {
   const avatar = useRef<StreamingAvatar | null>(null);
   const [chatMode, setChatMode] = useState("text_mode");
   const [isUserTalking, setIsUserTalking] = useState(false);
+
+  const [selectedKnowledgeBase, setSelectedKnowledgeBase] = useState("");
+  const [knowledgeBaseDescription, setKnowledgeBaseDescription] = useState("");
 
   async function fetchAccessToken() {
     try {
@@ -91,9 +94,9 @@ export default function InteractiveAvatar() {
       const res = await avatar.current.createStartAvatar({
         quality: AvatarQuality.Low,
         avatarName: avatarId,
-        knowledgeId: knowledgeId, // Or use a custom `knowledgeBase`.
+        knowledgeId: selectedKnowledgeBase,
         voice: {
-          rate: 1.5, // 0.5 ~ 1.5
+          rate: 1.5,
           emotion: VoiceEmotion.EXCITED,
         },
         language: language,
@@ -176,6 +179,12 @@ export default function InteractiveAvatar() {
     }
   }, [mediaStream, stream]);
 
+  const handleKnowledgeBaseChange = (value: string) => {
+    setSelectedKnowledgeBase(value);
+    const selectedKB = KNOWLEDGE_BASE_IDS.find(kb => kb.id === value);
+    setKnowledgeBaseDescription(selectedKB ? selectedKB.description : "");
+  };
+
   return (
     <div className="w-full flex flex-col gap-4">
       <Card>
@@ -215,50 +224,48 @@ export default function InteractiveAvatar() {
             </div>
           ) : !isLoadingSession ? (
             <div className="h-full justify-center items-center flex flex-col gap-8 w-[500px] self-center">
-              <div className="flex flex-col gap-2 w-full">
-                <p className="text-sm font-medium leading-none">
-                  Custom Knowledge ID (optional)
-                </p>
-                <Input
-                  placeholder="Enter a custom knowledge ID"
-                  value={knowledgeId}
-                  onChange={(e) => setKnowledgeId(e.target.value)}
-                />
-                <p className="text-sm font-medium leading-none">
-                  Custom Avatar ID (optional)
-                </p>
-                <Input
-                  placeholder="Enter a custom avatar ID"
-                  value={avatarId}
-                  onChange={(e) => setAvatarId(e.target.value)}
-                />
+              <div className="flex flex-col gap-4 w-full">
                 <Select
-                  placeholder="Or select one from these example avatars"
-                  size="md"
-                  onChange={(e) => {
-                    setAvatarId(e.target.value);
-                  }}
+                  label="Select Knowledge Base"
+                  placeholder="Choose a knowledge base"
+                  className="w-full"
+                  onChange={(e) => handleKnowledgeBaseChange(e.target.value)}
+                >
+                  {KNOWLEDGE_BASE_IDS.map((kb) => (
+                    <SelectItem key={kb.id} value={kb.id}>
+                      {kb.name}
+                    </SelectItem>
+                  ))}
+                </Select>
+
+                {knowledgeBaseDescription && (
+                  <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-md mt-2">
+                    <p className="text-sm">{knowledgeBaseDescription}</p>
+                  </div>
+                )}
+
+                <Select
+                  label="Select Avatar"
+                  placeholder="Choose an avatar"
+                  className="w-full"
+                  onChange={(e) => setAvatarId(e.target.value)}
                 >
                   {AVATARS.map((avatar) => (
-                    <SelectItem
-                      key={avatar.avatar_id}
-                      textValue={avatar.avatar_id}
-                    >
+                    <SelectItem key={avatar.avatar_id} value={avatar.avatar_id}>
                       {avatar.name}
                     </SelectItem>
                   ))}
                 </Select>
+
                 <Select
-                  label="Select language"
-                  placeholder="Select language"
-                  className="max-w-xs"
+                  label="Select Language"
+                  placeholder="Choose a language"
+                  className="w-full"
                   selectedKeys={[language]}
-                  onChange={(e) => {
-                    setLanguage(e.target.value);
-                  }}
+                  onChange={(e) => setLanguage(e.target.value)}
                 >
                   {STT_LANGUAGE_LIST.map((lang) => (
-                    <SelectItem key={lang.key}>
+                    <SelectItem key={lang.key} value={lang.key}>
                       {lang.label}
                     </SelectItem>
                   ))}
@@ -279,6 +286,11 @@ export default function InteractiveAvatar() {
         </CardBody>
         <Divider />
         <CardFooter className="flex flex-col gap-3 relative">
+          <div className="w-full text-center mb-2">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              To have a video chat, please select "Voice mode"
+            </p>
+          </div>
           <Tabs
             aria-label="Options"
             selectedKey={chatMode}
