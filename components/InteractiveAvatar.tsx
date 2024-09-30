@@ -286,11 +286,6 @@ export default function InteractiveAvatar() {
         </CardBody>
         <Divider />
         <CardFooter className="flex flex-col gap-3 relative">
-          <div className="w-full text-center mb-2">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              To have a video chat, please select "Voice mode"
-            </p>
-          </div>
           <Tabs
             aria-label="Options"
             selectedKey={chatMode}
