@@ -2,7 +2,7 @@ import type { StartAvatarResponse } from "@heygen/streaming-avatar";
 
 import StreamingAvatar, {
   AvatarQuality,
-  StreamingEvents, TaskType, VoiceEmotion,
+  StreamingEvents, VoiceEmotion,
 } from "@heygen/streaming-avatar";
 import {
   Button,
