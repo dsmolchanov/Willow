@@ -1,22 +1,15 @@
 {
     "version": 2,
-    "builds": [
-      {
-        "src": "next.config.mjs",
-        "use": "@vercel/node"
-      }
-    ],
+    "buildCommand": "next build",
+    "devCommand": "next dev",
+    "outputDirectory": ".next",
     "routes": [
       {
-        "src": "/static/streaming\\.proto",
-        "dest": "/static/streaming.proto",
+        "src": "/streaming\\.proto",
+        "dest": "/streaming.proto",
         "headers": {
           "Content-Type": "application/octet-stream"
         }
-      },
-      {
-        "src": "/(.*)",
-        "dest": "/next.config.mjs"
       }
     ]
   }
