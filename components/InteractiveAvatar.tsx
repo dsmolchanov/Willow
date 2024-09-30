@@ -91,27 +91,26 @@ export default function InteractiveAvatar() {
   console.log("Initializing StreamingAvatar with token.");
   setDebug("Initializing avatar session...");
 
-  console.log('Initializing avatar with proto path:', `${proxyUrl}/static/streaming.proto`);
-
-try {
-  avatar.current = new StreamingAvatar({
-    token: newToken,
-    protoPath: `${proxyUrl}/static/streaming.proto`,
-  });
-  console.log("Avatar initialized successfully");
-} catch (error) {
-  console.error("Error initializing avatar:", error);
-  setDebug(`Error initializing avatar: ${error.message}`);
+  try {
+    avatar.current = new StreamingAvatar({
+      token: newToken,
+      protoPath: '/static/streaming.proto', // This now points to your local file
+    });
+    console.log("Avatar initialized successfully");
+    
+    // Test proto file loading
+    fetch('/static/streaming.proto')
+      .then(response => {
+        console.log('Proto file fetch status:', response.status);
+        return response.text();
+      })
+      .then(text => console.log("Proto file content length:", text.length))
+      .catch(e => console.error("Error fetching proto file:", e));
   
-  // Attempt to fetch the proto file manually
-  fetch('/heygen-static/static/streaming.proto')
-    .then(response => {
-      console.log('Proto file fetch status:', response.status);
-      return response.text();
-    })
-    .then(text => console.log("Proto file content length:", text.length))
-    .catch(e => console.error("Error fetching proto file:", e));
-}
+  } catch (error) {
+    console.error("Error initializing avatar:", error);
+    setDebug(`Error initializing avatar: ${error.message}`);
+  }
 
     avatar.current.on(StreamingEvents.AVATAR_START_TALKING, (e) => {
       console.log("Avatar started talking", e);

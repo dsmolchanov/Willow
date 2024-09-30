@@ -1,8 +1,22 @@
 {
     "version": 2,
-    "buildCommand": "npm run build",
-    "devCommand": "npm run dev",
-    "installCommand": "npm install",
-    "framework": "nextjs",
-    "outputDirectory": ".next"
+    "builds": [
+      {
+        "src": "next.config.mjs",
+        "use": "@vercel/node"
+      }
+    ],
+    "routes": [
+      {
+        "src": "/static/streaming\\.proto",
+        "dest": "/static/streaming.proto",
+        "headers": {
+          "Content-Type": "application/octet-stream"
+        }
+      },
+      {
+        "src": "/(.*)",
+        "dest": "/next.config.mjs"
+      }
+    ]
   }

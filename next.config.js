@@ -14,14 +14,6 @@ const nextConfig = {
         // We recommend fixing type errors instead.
         ignoreBuildErrors: true,
       },
-      async rewrites() {
-        return [
-          {
-            source: '/heygen-static/:path*',
-            destination: 'https://static.heygen.ai/:path*',
-          },
-        ];
-      },
       async headers() {
         return [
           {

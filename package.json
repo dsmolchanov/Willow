@@ -3,9 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "node_modules/next/dist/bin/next dev",
+    "dev": "node next.config.mjs",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_ENV=production node next.config.mjs",
     "lint": "next lint"
   },
   "dependencies": {
