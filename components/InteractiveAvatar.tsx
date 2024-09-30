@@ -1,4 +1,4 @@
-import type { StartAvatarResponse } from "@heygen/streaming-avatar";
+//import type { StartAvatarResponse } from "@heygen/streaming-avatar";
 
 import StreamingAvatar, {
   AvatarQuality,
