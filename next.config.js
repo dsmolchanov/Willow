@@ -17,8 +17,21 @@ const nextConfig = {
       async rewrites() {
         return [
           {
-            source: '/static/:path*',
-            destination: 'https://static.heygen.ai/static/:path*',
+            source: '/heygen-static/:path*',
+            destination: 'https://static.heygen.ai/:path*',
+          },
+        ];
+      },
+      async headers() {
+        return [
+          {
+            source: '/heygen-static/:path*',
+            headers: [
+              { key: 'Access-Control-Allow-Origin', value: '*' },
+              { key: 'Access-Control-Allow-Methods', value: 'GET,OPTIONS' },
+              { key: 'Access-Control-Allow-Headers', value: 'X-Requested-With,content-type' },
+              { key: 'Content-Type', value: 'application/octet-stream' },
+            ],
           },
         ];
       },
