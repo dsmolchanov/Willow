@@ -42,28 +42,49 @@ export default function InteractiveAvatar() {
   const [isUserTalking, setIsUserTalking] = useState(false);
 
   const [selectedKnowledgeBase, setSelectedKnowledgeBase] = useState("");
-  const [knowledgeBaseDescription, setKnowledgeBaseDescription] = useState("");
 
   async function fetchAccessToken() {
     try {
       const response = await fetch("/api/get-access-token", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        // Include body if required by your API
+        // body: JSON.stringify({ /* your payload */ }),
       });
+  
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Failed to fetch access token:", errorText);
+        setDebug(`Failed to fetch access token: ${errorText}`);
+        return "";
+      }
+  
       const token = await response.text();
-
-      console.log("Access Token:", token); // Log the token to verify
-
+      console.log("Access Token:", token.substring(0, 10) + '...'); // Partial logging for security
+      setDebug("Access Token fetched successfully.");
       return token;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching access token:", error);
+      setDebug(`Error fetching access token: ${error.message}`);
+      return "";
     }
-
-    return "";
   }
+  
 
   async function startSession() {
     setIsLoadingSession(true);
     const newToken = await fetchAccessToken();
+
+    if (!newToken) {
+      setDebug("No access token received. Cannot start avatar session.");
+      setIsLoadingSession(false);
+      return;
+    }
+  
+    console.log("Initializing StreamingAvatar with token.");
+    setDebug("Initializing avatar session...");
 
     avatar.current = new StreamingAvatar({
       token: newToken,
@@ -179,12 +200,6 @@ export default function InteractiveAvatar() {
     }
   }, [mediaStream, stream]);
 
-  const handleKnowledgeBaseChange = (value: string) => {
-    setSelectedKnowledgeBase(value);
-    const selectedKB = KNOWLEDGE_BASE_IDS.find(kb => kb.id === value);
-    setKnowledgeBaseDescription(selectedKB ? selectedKB.description : "");
-  };
-
   return (
     <div className="w-full flex flex-col gap-4">
       <Card>
@@ -229,7 +244,7 @@ export default function InteractiveAvatar() {
                   label="Select Knowledge Base"
                   placeholder="Choose a knowledge base"
                   className="w-full"
-                  onChange={(e) => handleKnowledgeBaseChange(e.target.value)}
+                  onChange={(e) => setSelectedKnowledgeBase(e.target.value)}
                 >
                   {KNOWLEDGE_BASE_IDS.map((kb) => (
                     <SelectItem key={kb.id} value={kb.id}>
@@ -237,12 +252,6 @@ export default function InteractiveAvatar() {
                     </SelectItem>
                   ))}
                 </Select>
-
-                {knowledgeBaseDescription && (
-                  <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-md mt-2">
-                    <p className="text-sm">{knowledgeBaseDescription}</p>
-                  </div>
-                )}
 
                 <Select
                   label="Select Avatar"

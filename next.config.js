@@ -14,6 +14,14 @@ const nextConfig = {
         // We recommend fixing type errors instead.
         ignoreBuildErrors: true,
       },
+      async rewrites() {
+        return [
+          {
+            source: '/static.heygen.ai/:path*',
+            destination: 'https://static.heygen.ai/:path*',
+          },
+        ];
+      },
   };
   
   module.exports = nextConfig;
