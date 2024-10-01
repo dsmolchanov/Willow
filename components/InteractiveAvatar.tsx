@@ -42,9 +42,13 @@ export default function InteractiveAvatar() {
   const [isUserTalking, setIsUserTalking] = useState(false);
 
   const [selectedKnowledgeBase, setSelectedKnowledgeBase] = useState("");
+  const [knowledgeBaseDescription, setKnowledgeBaseDescription] = useState("");
 
-  const heygenStaticUrl = process.env.NEXT_PUBLIC_HEYGEN_STATIC_URL || 'https://static.heygen.ai';
-  const proxyUrl = '/heygen-static'; // This will be rewritten by Next.js
+  const handleKnowledgeBaseChange = (value: string) => {
+    setSelectedKnowledgeBase(value);
+    const selectedKB = KNOWLEDGE_BASE_IDS.find(kb => kb.id === value);
+    setKnowledgeBaseDescription(selectedKB ? selectedKB.description : "");
+  };
 
 
 
@@ -248,18 +252,18 @@ export default function InteractiveAvatar() {
           ) : !isLoadingSession ? (
             <div className="h-full justify-center items-center flex flex-col gap-8 w-[500px] self-center">
               <div className="flex flex-col gap-4 w-full">
-                <Select
-                  label="Select Knowledge Base"
-                  placeholder="Choose a knowledge base"
-                  className="w-full"
-                  onChange={(e) => setSelectedKnowledgeBase(e.target.value)}
-                >
-                  {KNOWLEDGE_BASE_IDS.map((kb) => (
-                    <SelectItem key={kb.id} value={kb.id}>
-                      {kb.name}
-                    </SelectItem>
-                  ))}
-                </Select>
+              <Select
+                label="Select Knowledge Base"
+                placeholder="Choose a knowledge base"
+                className="w-full"
+                onChange={(e) => handleKnowledgeBaseChange(e.target.value)}
+              >
+                {KNOWLEDGE_BASE_IDS.map((kb) => (
+                  <SelectItem key={kb.id} value={kb.id}>
+                    {kb.name}
+                  </SelectItem>
+                ))}
+              </Select>
 
                 <Select
                   label="Select Avatar"
@@ -288,6 +292,12 @@ export default function InteractiveAvatar() {
                   ))}
                 </Select>
               </div>
+
+              {selectedKnowledgeBase && knowledgeBaseDescription && (
+                <p className="text-sm text-gray-600 mt-2 mb-4">
+                  {knowledgeBaseDescription}
+                </p>
+              )}
               <Button
                 className="bg-gradient-to-tr from-indigo-500 to-indigo-300 w-full text-white"
                 size="md"
@@ -303,7 +313,13 @@ export default function InteractiveAvatar() {
         </CardBody>
         <Divider />
         <CardFooter className="flex flex-col gap-3 relative">
-          <Tabs
+         
+          <div className="w-full text-center mb-2">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            To have a video chat, please select "Voice mode"
+          </p>
+        </div>
+         <Tabs
             aria-label="Options"
             selectedKey={chatMode}
             onSelectionChange={(v) => {
