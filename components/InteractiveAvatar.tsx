@@ -91,26 +91,11 @@ export default function InteractiveAvatar() {
   console.log("Initializing StreamingAvatar with token.");
   setDebug("Initializing avatar session...");
 
-  try {
-    avatar.current = new StreamingAvatar({
-      token: newToken,
-      protoPath: '/streaming.proto', // This points to the file in your public directory
+  avatar.current = new StreamingAvatar({
+    token: newToken,
     });
     console.log("Avatar initialized successfully");
     
-    // Test proto file loading
-    fetch('/streaming.proto')
-      .then(response => {
-        console.log('Proto file fetch status:', response.status);
-        return response.text();
-      })
-      .then(text => console.log("Proto file content length:", text.length))
-      .catch(e => console.error("Error fetching proto file:", e));
-  
-  } catch (error) {
-    console.error("Error initializing avatar:", error);
-    setDebug(`Error initializing avatar: ${error.message}`);
-  }
 
     avatar.current.on(StreamingEvents.AVATAR_START_TALKING, (e) => {
       console.log("Avatar started talking", e);
