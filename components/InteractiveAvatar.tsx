@@ -211,7 +211,7 @@ useEffect(() => {
       setChatMode("voice_mode");
   
       const sessionData = {
-        clerk_id: user?.id || 'Anonymous',
+        clerk_id: user?.id || 'Anonymous', // Use 'Anonymous' if user is not logged in
         knowledgebase_id: selectedKnowledgeBase,
         avatar_id: avatarId,
         language: language,
@@ -225,7 +225,6 @@ useEffect(() => {
       setDebug('Session started successfully');
       resetInactivityTimer();
 
-      // Ensure no unintended session endings are triggered here
       console.log('Session start completed. Current session ID:', sessionId);
   
     } catch (error) {
@@ -358,7 +357,10 @@ useEffect(() => {
         .map(m => `${m.speaker}: ${m.text}`)
         .join('\n');
       
-      await endSession(supabase, currentSessionId, transcript);
+      // Use the user's ID if available, otherwise use 'Anonymous'
+      const userId = user?.id || 'Anonymous';
+      
+      await endSession(supabase, currentSessionId, transcript, userId);
       console.log('Session ended successfully:', currentSessionId);
       
       // Reset all relevant state
@@ -384,7 +386,7 @@ useEffect(() => {
       setIsEndingSession(false);
       endSessionRef.current = false;
     }
-  }, [supabase, currentSessionId, messages, forceUpdate, setCurrentSessionId, setStream, setMessages, setData, setChatMode, setIsUserTalking, setDebug]);
+  }, [supabase, currentSessionId, messages, forceUpdate, setCurrentSessionId, setStream, setMessages, setData, setChatMode, setIsUserTalking, setDebug, user]);
 
   useEffect(() => {
     if (avatar.current) {
