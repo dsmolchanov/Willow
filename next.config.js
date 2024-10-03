@@ -4,6 +4,7 @@ const nextConfig = {
     swcMinify: true,
     experimental: {
       esmExternals: 'loose',
+      appDir: true,
     },
     eslint: {
       ignoreDuringBuilds: true,

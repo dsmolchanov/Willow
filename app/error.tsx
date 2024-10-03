@@ -1,19 +1,19 @@
-"use client";
+// app/error.tsx
+'use client' // Error components must be Client Components
 
-import { useEffect } from "react";
+import { useEffect } from 'react'
 
 export default function Error({
   error,
   reset,
 }: {
-  error: Error;
-  reset: () => void;
+  error: Error
+  reset: () => void
 }) {
   useEffect(() => {
     // Log the error to an error reporting service
-    /* eslint-disable no-console */
-    console.error(error);
-  }, [error]);
+    console.error(error)
+  }, [error])
 
   return (
     <div>
@@ -27,5 +27,5 @@ export default function Error({
         Try again
       </button>
     </div>
-  );
+  )
 }
