@@ -13,7 +13,15 @@ export interface Session {
   transcript?: string;
 }
 
-export async function startSession(supabase: SupabaseClient, sessionData: any) {
+export interface SessionData {
+  clerk_id: string;
+  knowledgebase_id: string;
+  avatar_id: string;
+  language: string;
+  type: string;
+}
+
+export async function startSession(supabase: SupabaseClient, sessionData: SessionData): Promise<string> {
   try {
     const { data, error } = await supabase
       .from('sessions')
@@ -22,6 +30,7 @@ export async function startSession(supabase: SupabaseClient, sessionData: any) {
       .single();
 
     if (error) throw error;
+    if (!data) throw new Error('No data returned from insert operation');
     return data.id;
   } catch (error) {
     console.error('Error starting session:', error);
@@ -29,35 +38,35 @@ export async function startSession(supabase: SupabaseClient, sessionData: any) {
   }
 }
 
-export async function updateSessionActivity(supabase: SupabaseClient, sessionId: string) {
+export async function updateSessionActivity(supabase: SupabaseClient, sessionId: string): Promise<void> {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('sessions')
       .update({ last_activity: new Date().toISOString() })
       .eq('id', sessionId);
 
     if (error) throw error;
-    return data;
   } catch (error) {
     console.error('Error updating session activity:', error);
     throw error;
   }
 }
 
-export async function endSession(supabase: SupabaseClient, sessionId: string, transcript: string) {
+export async function endSession(supabase: SupabaseClient, sessionId: string, transcript: string): Promise<Session> {
   try {
     const { data, error } = await supabase
       .from('sessions')
       .update({ 
         ended_at: new Date().toISOString(),
         transcript: transcript,
-        is_active: false  // Set is_active to false
+        is_active: false
       })
       .eq('id', sessionId)
       .select()
       .single();
 
     if (error) throw error;
+    if (!data) throw new Error('No data returned from update operation');
     return data;
   } catch (error) {
     console.error('Error ending session:', error);

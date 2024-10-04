@@ -37,6 +37,7 @@ import InteractiveAvatarTextInput from "./InteractiveAvatarTextInput";
 
 import { AVATARS, STT_LANGUAGE_LIST, KNOWLEDGE_BASE_IDS } from "@/app/lib/constants";
 import { SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js'
 
 interface Message {
   speaker: 'User' | 'Avatar';
@@ -107,12 +108,31 @@ const [isSupabaseInitialized, setIsSupabaseInitialized] = useState(false);
 const { session, isLoaded, isSignedIn } = useSession();
 
 useEffect(() => {
-  if (session) {
-    const client = createClerkSupabaseClient(session);
-    setSupabase(client);
-    setIsSupabaseInitialized(true);
+  initializeSupabase()
+}, [])
+
+async function initializeSupabase() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('Supabase URL or Anon Key is missing')
+    return
   }
-}, [session]);
+
+  let supabaseClient
+
+  if (user) {
+    const token = await getToken({ template: 'supabase' })
+    supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    })
+  } else {
+    supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
+  }
+
+  setSupabase(supabaseClient)
+}
 
 useEffect(() => {
   if (isSupabaseInitialized && user) {
@@ -178,12 +198,14 @@ useEffect(() => {
   }
 
   async function handleStartSession() {
-    setIsLoadingSession(true);
+    if (!supabase) {
+      console.error('Supabase client is not initialized')
+      setDebug('Supabase client is not initialized')
+      return
+    }
+
+    setIsLoadingSession(true)
     try {
-      if (!supabase) {
-        throw new Error('Supabase client is not initialized');
-      }
-  
       const newToken = await fetchAccessToken();
       if (!newToken) {
         throw new Error("No access token received. Cannot start avatar session.");
@@ -211,7 +233,7 @@ useEffect(() => {
       setChatMode("voice_mode");
   
       const sessionData = {
-        clerk_id: user?.id || 'Anonymous', // Use 'Anonymous' if user is not logged in
+        clerk_id: user?.id || 'Anonymous',
         knowledgebase_id: selectedKnowledgeBase,
         avatar_id: avatarId,
         language: language,
