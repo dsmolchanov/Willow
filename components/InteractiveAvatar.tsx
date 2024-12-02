@@ -28,7 +28,13 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useMemoizedFn, usePrevious } from "ahooks";
 import { useUser, useAuth, useSession } from '@clerk/nextjs';
 
-import { startSession, updateSessionActivity, endSession } from '../lib/sessionManagement';
+
+import { 
+  startSession, 
+  updateSessionActivity, 
+  endSession,
+  type SessionData 
+} from '../lib/sessionManagement';
 import { supabase, initializeWithClerkToken } from '../lib/supabaseClient';
 
 import { createClerkSupabaseClient } from '../lib/supabaseClient';
@@ -43,6 +49,15 @@ interface Message {
   speaker: 'User' | 'Avatar';
   text: string;
   isComplete: boolean;
+}
+
+
+interface SessionData {
+  clerk_id: string;
+  knowledgebase_id: string;
+  avatar_id: string;
+  language: string;
+  type: string;
 }
 
 export default function InteractiveAvatar() {
@@ -170,7 +185,7 @@ useEffect(() => {
     }
   }, [messages]);
 
-  async function fetchAccessToken() {
+  async function fetchAccessToken(): Promise<string> {
     try {
       const response = await fetch("/api/get-access-token", {
         method: "POST",
@@ -182,84 +197,134 @@ useEffect(() => {
       if (!response.ok) {
         const errorText = await response.text();
         console.error("Failed to fetch access token:", errorText);
-        setDebug(`Failed to fetch access token: ${errorText}`);
-        return "";
+        throw new Error(`Failed to fetch access token: ${errorText}`);
       }
   
       const token = await response.text();
       console.log("Access Token:", token.substring(0, 10) + '...');
-      setDebug("Access Token fetched successfully.");
       return token;
     } catch (error: any) {
       console.error("Error fetching access token:", error);
-      setDebug(`Error fetching access token: ${error.message}`);
-      return "";
-    }
-  }
-
-  async function handleStartSession() {
-    if (!supabase) {
-      console.error('Supabase client is not initialized')
-      setDebug('Supabase client is not initialized')
-      return
-    }
-
-    setIsLoadingSession(true)
-    try {
-      const newToken = await fetchAccessToken();
-      if (!newToken) {
-        throw new Error("No access token received. Cannot start avatar session.");
-      }
-  
-      avatar.current = new StreamingAvatar({ token: newToken });
-      console.log("Avatar initialized successfully");
-  
-      setupEventListeners();
-  
-      const res = await avatar.current.createStartAvatar({
-        quality: AvatarQuality.High,
-        avatarName: avatarId,
-        knowledgeId: selectedKnowledgeBase,
-        voice: {
-          rate: 1.5,
-          emotion: VoiceEmotion.EXCITED,
-        },
-        language: language,
-      });
-  
-      console.log("Avatar started successfully:", res);
-      setData(res);
-      await avatar.current.startVoiceChat();
-      setChatMode("voice_mode");
-  
-      const sessionData = {
-        clerk_id: user?.id || 'Anonymous',
-        knowledgebase_id: selectedKnowledgeBase,
-        avatar_id: avatarId,
-        language: language,
-        type: 'Voice'
-      };
-  
-      console.log('About to call startSession with:', sessionData);
-      const sessionId = await startSession(supabase, sessionData);  
-      console.log('Session started with ID:', sessionId);
-      setCurrentSessionId(sessionId);
-      setDebug('Session started successfully');
-      resetInactivityTimer();
-
-      console.log('Session start completed. Current session ID:', sessionId);
-  
-    } catch (error) {
-      console.error("Error in handleStartSession:", error);
-      setDebug(`Error starting session: ${error.message}`);
-      if (error.message.includes('has no field')) {
-        setDebug(`Error: There might be a mismatch between the code and the database schema. Please check your Supabase table structure.`);
-      }
-    } finally {
-      setIsLoadingSession(false);
+      throw error; // Propagate error instead of returning empty string
     }
   }
   
+ // Modified handleStartSession function for InteractiveAvatar component
+async function handleStartSession() {
+  if (!supabase || !user) {
+    console.error('Supabase client or user not initialized');
+    return;
+  }
+
+  setIsLoadingSession(true);
+  try {
+    // 1. Fetch access token
+    const newToken = await fetchAccessToken();
+    if (!newToken) {
+      throw new Error("No access token received. Cannot start avatar session.");
+    }
+
+    // 2. Initialize avatar
+    avatar.current = new StreamingAvatar({ token: newToken });
+    console.log("Avatar initialized successfully");
+    
+    // 3. Setup event listeners
+    setupEventListeners();
+
+    // 4. Start avatar
+    const res = await avatar.current.createStartAvatar({
+      quality: AvatarQuality.High,
+      avatarName: avatarId,
+      knowledgeId: selectedKnowledgeBase,
+      voice: {
+        rate: 1.5,
+        emotion: VoiceEmotion.EXCITED,
+      },
+      language: language,
+    });
+
+    // 5. Create session in database
+    const sessionData = {
+      clerk_id: user.id,
+      knowledgebase_id: selectedKnowledgeBase,
+      avatar_id: avatarId,
+      language: language,
+      type: chatMode === 'voice_mode' ? 'Voice' : 'Text'
+    };
+
+    const sessionId = await startSession(supabase, sessionData);
+    setCurrentSessionId(sessionId);
+
+    // 6. Update UI state
+    console.log("Avatar started successfully:", res);
+    setData(res);
+    await avatar.current.startVoiceChat();
+    setChatMode("voice_mode");
+    setDebug('Session started successfully');
+
+  } catch (error: any) {
+    console.error("Error in handleStartSession:", error);
+    setDebug(`Error starting session: ${error.message}`);
+    
+    // Cleanup on error
+    if (avatar.current) {
+      try {
+        await avatar.current.destroy();
+        avatar.current = null;
+      } catch (cleanupError) {
+        console.error("Error cleaning up avatar:", cleanupError);
+      }
+    }
+  } finally {
+    setIsLoadingSession(false);
+  }
+}
+
+// Modified handleEndSession function
+const handleEndSession = useCallback(async () => {
+  if (!supabase || !currentSessionId || endSessionRef.current) {
+    console.log('No active session to end or already ending session');
+    return;
+  }
+
+  endSessionRef.current = true;
+  setIsEndingSession(true);
+  
+  try {
+    // Cleanup avatar
+    if (avatar.current) {
+      if (typeof avatar.current.destroy === 'function') {
+        await avatar.current.destroy();
+      }
+      avatar.current.closeVoiceChat();
+    }
+
+    // Create transcript from messages
+    const transcript = messages
+      .filter(m => m.text !== '[Voice Input]')
+      .map(m => `${m.speaker}: ${m.text}`)
+      .join('\n');
+
+    // End session in database
+    await endSession(supabase, currentSessionId, transcript, user?.id);
+
+    // Reset state
+    setCurrentSessionId(null);
+    setStream(undefined);
+    setMessages([]);
+    setData(undefined);
+    setChatMode("text_mode");
+    setIsUserTalking(false);
+    setSessionEnded(true);
+    
+  } catch (error) {
+    console.error('Error ending session:', error);
+    setDebug(`Error ending session: ${error.message}`);
+  } finally {
+    setIsEndingSession(false);
+    endSessionRef.current = false;
+  }
+}, [supabase, currentSessionId, messages, user?.id]);
   function setupEventListeners() {
     if (!avatar.current) return;
   

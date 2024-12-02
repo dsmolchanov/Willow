@@ -1,3 +1,4 @@
+// lib/sessionManagement.ts
 import { SupabaseClient } from '@supabase/supabase-js';
 
 export interface Session {
@@ -11,6 +12,7 @@ export interface Session {
   last_activity?: string;
   ended_at?: string;
   transcript?: string;
+  is_active?: boolean;
 }
 
 export interface SessionData {
@@ -21,16 +23,31 @@ export interface SessionData {
   type: string;
 }
 
-export async function startSession(supabase: SupabaseClient, sessionData: SessionData): Promise<string> {
+export async function startSession(
+  supabase: SupabaseClient, 
+  sessionData: SessionData
+): Promise<string> {
   try {
     const { data, error } = await supabase
       .from('sessions')
-      .insert([sessionData])
+      .insert([{
+        ...sessionData,
+        started_at: new Date().toISOString(),
+        is_active: true,
+        last_activity: new Date().toISOString()
+      }])
       .select()
       .single();
 
-    if (error) throw error;
-    if (!data) throw new Error('No data returned from insert operation');
+    if (error) {
+      console.error('Error in startSession:', error);
+      throw error;
+    }
+    
+    if (!data) {
+      throw new Error('No data returned from insert operation');
+    }
+
     return data.id;
   } catch (error) {
     console.error('Error starting session:', error);
@@ -38,36 +55,49 @@ export async function startSession(supabase: SupabaseClient, sessionData: Sessio
   }
 }
 
-export async function updateSessionActivity(supabase: SupabaseClient, sessionId: string): Promise<void> {
+export async function updateSessionActivity(
+  supabase: SupabaseClient, 
+  sessionId: string
+): Promise<void> {
   try {
     const { error } = await supabase
       .from('sessions')
-      .update({ last_activity: new Date().toISOString() })
+      .update({ 
+        last_activity: new Date().toISOString() 
+      })
       .eq('id', sessionId);
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error in updateSessionActivity:', error);
+      throw error;
+    }
   } catch (error) {
     console.error('Error updating session activity:', error);
     throw error;
   }
 }
 
-export async function endSession(supabase: SupabaseClient, sessionId: string, transcript: string): Promise<Session> {
+export async function endSession(
+  supabase: SupabaseClient, 
+  sessionId: string, 
+  transcript: string,
+  userId?: string
+): Promise<void> {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('sessions')
       .update({ 
         ended_at: new Date().toISOString(),
         transcript: transcript,
-        is_active: false
+        is_active: false,
+        user_id: userId || 'Anonymous'
       })
-      .eq('id', sessionId)
-      .select()
-      .single();
+      .eq('id', sessionId);
 
-    if (error) throw error;
-    if (!data) throw new Error('No data returned from update operation');
-    return data;
+    if (error) {
+      console.error('Error in endSession:', error);
+      throw error;
+    }
   } catch (error) {
     console.error('Error ending session:', error);
     throw error;
