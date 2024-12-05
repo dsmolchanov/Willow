@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@11labs/react": "^0.0.4",
     "@ai-sdk/openai": "^0.0.34",
     "@clerk/nextjs": "^5.6.4",
     "@heygen/streaming-avatar": "^2.0.6",

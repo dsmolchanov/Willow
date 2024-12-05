@@ -11,6 +11,15 @@ module.exports = {
   		fontFamily: {
   			poppins: ['Poppins', 'sans-serif']
   		},
+		  keyframes: {
+			soundWave: {
+			  '0%, 100%': { transform: 'scaleY(0.5)' },
+			  '50%': { transform: 'scaleY(1.5)' },
+			},
+		  },
+		  animation: {
+			soundWave: 'soundWave 0.5s ease-in-out infinite',
+		  },
   		colors: {
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',

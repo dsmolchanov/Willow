@@ -1,231 +1,128 @@
-import React, { useState } from 'react';
+"use client";
+import React, { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useConversation } from '@11labs/react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { Check } from 'lucide-react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { useEffect } from 'react';
 
-const OnboardingForm = () => {
+export function Conversation() {
   const router = useRouter();
-  const [step, setStep] = useState(0);
-  const [formData, setFormData] = useState({
-    learning_style: '',
-    experience_level: '',
-    professional_role: '',
-    industry: '',
-    language_proficiency: { EN: '' },
-    communication_style: '',
-    goals: []
+  const conversation = useConversation({
+    onConnect: () => console.log('Connected'),
+    onDisconnect: () => console.log('Disconnected'),
+    onMessage: (message) => {
+      console.log('Message:', message);
+    },
+    onError: (error) => console.error('Error:', error),
   });
 
-  const steps = [
-    {
-      title: 'Learning Style',
-      field: 'learning_style',
-      options: [
-        { value: 'Visual', label: 'Visual (seeing)' },
-        { value: 'Auditory', label: 'Auditory (listening)' },
-        { value: 'Reading/Writing', label: 'Reading/Writing' },
-        { value: 'Kinesthetic', label: 'Kinesthetic (doing)' },
-        { value: 'Multimodal', label: 'Multimodal (combination)' }
-      ]
-    },
-    {
-      title: 'Experience Level',
-      field: 'experience_level',
-      options: [
-        { value: 'Beginner', label: 'Beginner' },
-        { value: 'Intermediate', label: 'Intermediate' },
-        { value: 'Advanced', label: 'Advanced' },
-        { value: 'Expert', label: 'Expert' }
-      ]
-    },
-    {
-      title: 'Professional Role',
-      field: 'professional_role',
-      options: [
-        { value: 'Individual_Contributor', label: 'Individual Contributor' },
-        { value: 'Team_Lead', label: 'Team Lead' },
-        { value: 'Manager', label: 'Manager' },
-        { value: 'Director', label: 'Director' },
-        { value: 'Executive', label: 'Executive' },
-        { value: 'Other', label: 'Other' }
-      ]
-    },
-    {
-      title: 'Industry',
-      field: 'industry',
-      options: [
-        { value: 'Technology', label: 'Technology' },
-        { value: 'Healthcare', label: 'Healthcare' },
-        { value: 'Finance', label: 'Finance' },
-        { value: 'Education', label: 'Education' },
-        { value: 'Manufacturing', label: 'Manufacturing' },
-        { value: 'Retail', label: 'Retail' },
-        { value: 'Government', label: 'Government' },
-        { value: 'Other', label: 'Other' }
-      ]
-    },
-    {
-      title: 'Language Proficiency',
-      field: 'language_proficiency',
-      options: [
-        { value: 'Basic', label: 'Basic' },
-        { value: 'Intermediate', label: 'Intermediate' },
-        { value: 'Fluent', label: 'Fluent' },
-        { value: 'Native', label: 'Native' }
-      ]
-    },
-    {
-      title: 'Communication Style',
-      field: 'communication_style',
-      options: [
-        { value: 'Direct', label: 'Direct and straightforward' },
-        { value: 'Indirect', label: 'Indirect and nuanced' },
-        { value: 'Formal', label: 'Formal and professional' },
-        { value: 'Casual', label: 'Casual and relaxed' }
-      ]
-    },
-    {
-      title: 'Goals',
-      field: 'goals',
-      isMulti: true,
-      options: [
-        { value: 'Skill_Development', label: 'Skill Development' },
-        { value: 'Career_Advancement', label: 'Career Advancement' },
-        { value: 'Performance_Improvement', label: 'Performance Improvement' },
-        { value: 'Certification', label: 'Certification Preparation' },
-        { value: 'Personal_Interest', label: 'Personal Interest' }
-      ]
-    }
-  ];
+  const supabase = createClientComponentClient();
+  const [conversationDbId, setConversationDbId] = React.useState<number | null>(null);
 
-  const handleSelect = (value) => {
-    const currentStep = steps[step];
-    if (currentStep.isMulti) {
-      setFormData(prev => ({
-        ...prev,
-        [currentStep.field]: prev[currentStep.field].includes(value)
-          ? prev[currentStep.field].filter(item => item !== value)
-          : [...prev[currentStep.field], value]
-      }));
-    } else if (currentStep.field === 'language_proficiency') {
-      setFormData(prev => ({
-        ...prev,
-        language_proficiency: { EN: value }
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [currentStep.field]: value
-      }));
-    }
-  };
+  const [avatarUrl, setAvatarUrl] = React.useState<string>('https://drive.google.com/uc?export=view&id=16wO37tj7GPDybu5-COHMC_ieLx7Y9Fbz');
 
-  const handleNext = () => {
-    if (step === steps.length - 1) {
-      // Save data to database
-      console.log('Final form data:', formData);
-      window.location.href = `${process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL}`;
-    } else {
-      setStep(prev => prev + 1);
-    }
-  };
+  const startConversation = useCallback(async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const session = await conversation.startSession({
+        agentId: 'doXNIsa8qmit1NjLQxgT',
+      });
 
-  const handleBack = () => {
-    setStep(prev => prev - 1);
-  };
+      console.log('Started conversation with ID:', session.conversationId);
 
-  const isStepComplete = () => {
-    const currentStep = steps[step];
-    if (currentStep.isMulti) {
-      return formData[currentStep.field].length > 0;
-    }
-    if (currentStep.field === 'language_proficiency') {
-      return formData.language_proficiency.EN !== '';
-    }
-    return formData[currentStep.field] !== '';
-  };
+      if (!session.conversationId) {
+        throw new Error('Failed to retrieve conversation ID');
+      }
 
-  const currentStep = steps[step];
+      const { data, error } = await supabase
+        .from('user_conversations')
+        .insert({
+          agent_id: 'doXNIsa8qmit1NjLQxgT',
+          elevenlabs_conversation_id: session.conversationId,
+          status: 'unknown',
+          start_time: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      setConversationDbId(data.conversation_id);
+
+    } catch (error) {
+      console.error('Failed to start conversation:', error);
+    }
+  }, [conversation, supabase]);
+
+  const stopConversation = useCallback(async () => {
+    try {
+      await conversation.endSession();
+    } catch (error) {
+      console.error('Failed to stop conversation:', error);
+    } finally {
+      if (conversationDbId) {
+        await supabase
+          .from('user_conversations')
+          .update({
+            end_time: new Date().toISOString()
+          })
+          .eq('conversation_id', conversationDbId);
+      }
+    }
+  }, [conversation, conversationDbId, supabase]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-lg">
         <CardHeader>
-          <CardTitle>{currentStep.title}</CardTitle>
-          <div className="flex gap-2 mt-4">
-            {steps.map((_, index) => (
-              <div
-                key={index}
-                className={`h-2 flex-1 rounded-full ${
-                  index <= step ? 'bg-blue-600' : 'bg-gray-200'
-                }`}
-              />
-            ))}
-          </div>
+          <CardTitle>Chat with AI Assistant</CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
-          {currentStep.isMulti ? (
-            <div className="space-y-4">
-              {currentStep.options.map((option) => (
-                <div
-                  key={option.value}
-                  className={`p-4 border rounded-lg cursor-pointer flex items-center justify-between ${
-                    formData[currentStep.field].includes(option.value)
-                      ? 'border-blue-600 bg-blue-50'
-                      : 'border-gray-200'
-                  }`}
-                  onClick={() => handleSelect(option.value)}
-                >
-                  <span>{option.label}</span>
-                  {formData[currentStep.field].includes(option.value) && (
-                    <Check className="h-5 w-5 text-blue-600" />
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 relative flex items-center justify-center">
+              {conversation.status === 'connected' && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  {conversation.isSpeaking ? (
+                    <div className="flex items-center gap-1">
+                      <div className="w-1 h-3 bg-blue-500 animate-[soundWave_0.5s_ease-in-out_infinite]"></div>
+                      <div className="w-1 h-4 bg-blue-500 animate-[soundWave_0.5s_ease-in-out_infinite_0.1s]"></div>
+                      <div className="w-1 h-5 bg-blue-500 animate-[soundWave_0.5s_ease-in-out_infinite_0.2s]"></div>
+                      <div className="w-1 h-4 bg-blue-500 animate-[soundWave_0.5s_ease-in-out_infinite_0.3s]"></div>
+                      <div className="w-1 h-3 bg-blue-500 animate-[soundWave_0.5s_ease-in-out_infinite_0.4s]"></div>
+                    </div>
+                  ) : (
+                    <div className="relative w-4 h-4">
+                      <div className="absolute inset-0 bg-red-500 rounded-full animate-ping opacity-75"></div>
+                      <div className="relative w-4 h-4 bg-red-500 rounded-full"></div>
+                    </div>
                   )}
                 </div>
-              ))}
+              )}
             </div>
-          ) : (
-            <Select
-              value={
-                currentStep.field === 'language_proficiency'
-                  ? formData.language_proficiency.EN
-                  : formData[currentStep.field]
-              }
-              onValueChange={handleSelect}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={`Select your ${currentStep.title.toLowerCase()}`} />
-              </SelectTrigger>
-              <SelectContent>
-                {currentStep.options.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+            <div className="flex gap-2">
+              <Button
+                onClick={startConversation}
+                disabled={conversation.status === 'connected'}
+              >
+                Start Conversation
+              </Button>
+              <Button
+                onClick={stopConversation}
+                disabled={conversation.status !== 'connected'}
+                variant="destructive"
+              >
+                End Conversation
+              </Button>
+            </div>
+
+            <div className="flex flex-col items-center text-center">
+              <p>Status: {conversation.status}</p>
+              <p>Agent is {conversation.isSpeaking ? 'speaking' : 'listening'}</p>
+            </div>
+          </div>
         </CardContent>
-        <CardFooter className="flex justify-between">
-          <Button
-            variant="outline"
-            onClick={handleBack}
-            disabled={step === 0}
-          >
-            Back
-          </Button>
-          <Button
-            onClick={handleNext}
-            disabled={!isStepComplete()}
-          >
-            {step === steps.length - 1 ? 'Complete' : 'Next'}
-          </Button>
-        </CardFooter>
       </Card>
     </div>
   );
-};
-
-export default OnboardingForm;
+}

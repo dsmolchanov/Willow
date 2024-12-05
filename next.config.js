@@ -3,8 +3,7 @@ const nextConfig = {
     reactStrictMode: true,
     swcMinify: true,
     experimental: {
-      esmExternals: 'loose',
-      appDir: true,
+      esmExternals: 'loose'
     },
     eslint: {
       ignoreDuringBuilds: true,
@@ -14,8 +13,7 @@ const nextConfig = {
         // your project has type errors. Use this to temporarily bypass type checking.
         // We recommend fixing type errors instead.
         ignoreBuildErrors: true,
-      },
-      
-  };
+    },
+};
   
-  module.exports = nextConfig;
+module.exports = nextConfig;

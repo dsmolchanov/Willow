@@ -3,38 +3,38 @@ import {
   SignInButton,
   SignedIn,
   SignedOut,
-  UserButton
-} from '@clerk/nextjs'
-import './globals.css'
+  UserButton,
+} from "@clerk/nextjs";
+import "./globals.css";
 import { Poppins } from 'next/font/google'
-
-const poppins = Poppins({ 
+ 
+ const poppins = Poppins({ 
   subsets: ['latin'],
   weight: ['400', '500', '700']
-})
+ })
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider
-      publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
-      afterSignInUrl="/"
-      afterSignUpUrl="/"
-    >
+    <ClerkProvider>
       <html lang="en">
-        <body className={poppins.className}>
-          <SignedOut>
-            <SignInButton />
-          </SignedOut>
-          <SignedIn>
-            <UserButton afterSignOutUrl="/" />
-          </SignedIn>
-          {children}
+        <body>
+          <header>
+            <SignedOut>
+              <SignInButton />
+            </SignedOut>
+
+            <SignedIn>
+              <UserButton />
+            </SignedIn>
+          </header>
+
+          <main>{children}</main>
         </body>
       </html>
     </ClerkProvider>
-  )
+  );
 }

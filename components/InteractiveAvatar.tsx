@@ -280,10 +280,10 @@ async function handleStartSession() {
   }
 }
 
-// Modified handleEndSession function
 const handleEndSession = useCallback(async () => {
+  console.log('handleEndSession called. Current session ID:', currentSessionId);
   if (!supabase || !currentSessionId || endSessionRef.current) {
-    console.log('No active session to end or already ending session');
+    console.log('No active session to end or already ending session. endSessionRef:', endSessionRef.current);
     return;
   }
 
@@ -416,64 +416,6 @@ const handleEndSession = useCallback(async () => {
     const selected = KNOWLEDGE_BASE_IDS.find(kb => kb.id === selectedKnowledgeBase);
     setKnowledgeBaseDescription(selected ? selected.description : '');
   }, [selectedKnowledgeBase]);
-
-  const handleEndSession = useCallback(async () => {
-    console.log('handleEndSession called. Current session ID:', currentSessionId);
-    if (!supabase || !currentSessionId || endSessionRef.current) {
-      console.log('No active session to end or already ending session. endSessionRef:', endSessionRef.current);
-      return;
-    }
-
-    endSessionRef.current = true;
-    setIsEndingSession(true);
-    try {
-      console.log('Starting to end session...', currentSessionId);
-      setDebug('Ending session...');
-      if (avatar.current) {
-        if (typeof avatar.current.destroy === 'function') {
-          await avatar.current.destroy();
-        }
-        if (typeof avatar.current.closeVoiceChat === 'function') {
-          avatar.current.closeVoiceChat();
-        }
-      }
-      
-      // Filter out "[Voice Input]" messages and create the transcript
-      const transcript = messages
-        .filter(m => m.text !== '[Voice Input]')
-        .map(m => `${m.speaker}: ${m.text}`)
-        .join('\n');
-      
-      // Use the user's ID if available, otherwise use 'Anonymous'
-      const userId = user?.id || 'Anonymous';
-      
-      await endSession(supabase, currentSessionId, transcript, userId);
-      console.log('Session ended successfully:', currentSessionId);
-      
-      // Reset all relevant state
-      setCurrentSessionId(null);
-      setStream(undefined);
-      setMessages([]);
-      setData(undefined);
-      setChatMode("text_mode");
-      setIsUserTalking(false);
-      
-      // Clear the avatar reference
-      avatar.current = null;
-      
-      setDebug('Session ended successfully');
-      
-      // Force a re-render of the component
-      forceUpdate();
-      setSessionEnded(true);
-    } catch (error) {
-      console.error('Error ending session:', error);
-      setDebug(`Error ending session: ${error.message}`);
-    } finally {
-      setIsEndingSession(false);
-      endSessionRef.current = false;
-    }
-  }, [supabase, currentSessionId, messages, forceUpdate, setCurrentSessionId, setStream, setMessages, setData, setChatMode, setIsUserTalking, setDebug, user]);
 
   useEffect(() => {
     if (avatar.current) {
