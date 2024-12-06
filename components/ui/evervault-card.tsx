@@ -2,13 +2,17 @@
 import { useMotionValue } from "framer-motion";
 import React, { useState, useEffect } from "react";
 import { useMotionTemplate, motion } from "framer-motion";
-import { cn } from "@/lib/utils";
+import { cn } from "../../utils/cn";
 
 export const EvervaultCard = ({
   text,
+  title,
+  description,
   className,
 }: {
   text?: string;
+  title?: string;
+  description?: string;
   className?: string;
 }) => {
   let mouseX = useMotionValue(0);
@@ -33,24 +37,28 @@ export const EvervaultCard = ({
   return (
     <div
       className={cn(
-        "p-0.5  bg-transparent aspect-square  flex items-center justify-center w-full h-full relative",
+        "p-0.5 bg-transparent aspect-square flex items-center justify-center w-full h-full relative",
         className
       )}
     >
       <div
         onMouseMove={onMouseMove}
-        className="group/card rounded-3xl w-full relative overflow-hidden bg-transparent flex items-center justify-center h-full"
+        className="group/card rounded-3xl w-full relative overflow-hidden bg-transparent flex flex-col items-center justify-center h-full"
       >
         <CardPattern
           mouseX={mouseX}
           mouseY={mouseY}
           randomString={randomString}
         />
-        <div className="relative z-10 flex items-center justify-center">
-          <div className="relative h-44 w-44  rounded-full flex items-center justify-center text-white font-bold text-4xl">
+        <div className="relative z-10 flex flex-col items-center justify-center p-4">
+          <div className="relative h-32 w-32 rounded-full flex items-center justify-center text-white font-bold text-3xl mb-4">
             <div className="absolute w-full h-full bg-white/[0.8] dark:bg-black/[0.8] blur-sm rounded-full" />
             <span className="dark:text-white text-black z-20">{text}</span>
           </div>
+          <h4 className="text-xl font-semibold mb-2 text-black dark:text-white z-20">{title}</h4>
+          <p className="text-sm text-center text-black/70 dark:text-white/70 z-20 max-w-[80%]">
+            {description}
+          </p>
         </div>
       </div>
     </div>

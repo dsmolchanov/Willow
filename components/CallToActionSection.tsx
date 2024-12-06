@@ -1,21 +1,42 @@
 // components/CallToActionSection.tsx
+"use client";
 import React from "react";
-import Link from "next/link";
+import { Button } from "@/components/ui/moving-border";
+import { useRouter } from 'next/navigation';
 
 const CallToActionSection: React.FC = () => {
+  const router = useRouter();
+
+  const handleNavigation = () => {
+    router.push('/onboarding');
+  };
+
   return (
-    <section className="py-16 bg-blue-600">
-      <div className="max-w-4xl mx-auto px-4 text-center">
-        <h3 className="text-3xl font-bold text-white mb-6">Ready to Transform Your Communication Skills?</h3>
-        <p className="text-lg text-white mb-8">
-          Start your personalized training journey today and unlock your full potential in handling any conversation.
+    <section className="py-16 bg-gray-50 dark:bg-gray-900">
+      <div className="max-w-7xl mx-auto px-4 text-center">
+        <h2 className="text-4xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-teal-400">
+          Ready to Transform Your Communication Skills?
+        </h2>
+        <p className="text-lg mb-10 text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+          Join thousands of others who have already enhanced their interpersonal abilities through our AI-powered platform.
         </p>
-        <Link 
-          href="/onboarding" 
-          className="bg-white text-blue-600 font-semibold py-3 px-6 rounded-full text-lg transition duration-300 hover:bg-gray-200"
-        >
-          Get Started Now
-        </Link>
+        <div className="flex justify-center">
+          <Button
+            borderRadius="0.75rem"
+            className="bg-white text-black border-2 border-slate-800 rounded-xl"
+            borderClassName="bg-[radial-gradient(var(--sky-500)_40%,transparent_60%)] w-[100px] h-[100px] rounded-xl"
+            containerClassName="p-[1px] hover:scale-105 transition-transform rounded-xl"
+            rx="30%"
+            ry="30%"
+            duration={4000}
+            onClick={handleNavigation}
+            style={{
+              '--sky-500': 'rgb(14 165 233)',
+            } as React.CSSProperties}
+          >
+            Get me onboard
+          </Button>
+        </div>
       </div>
     </section>
   );

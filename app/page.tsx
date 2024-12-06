@@ -5,6 +5,7 @@ import HeroSection from "@/components/HeroSection";
 import BenefitsSection from "@/components/BenefitsSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
 import FeaturesSection from "@/components/FeaturesSection";
+import CallToActionSection from "@/components/CallToActionSection";
 
 export default function HomePage() {
   return (
@@ -20,7 +21,7 @@ export default function HomePage() {
       <div className="bg-white">
         <BenefitsSection />
         <HowItWorksSection />
-        <FeaturesSection />
+        <CallToActionSection />
       </div>
     </>
   );
