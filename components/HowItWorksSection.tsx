@@ -29,16 +29,18 @@ const HowItWorksSection: React.FC = () => {
   return (
     <section className="py-16">
       <div className="max-w-7xl mx-auto px-4">
-        <h3 className="text-3xl font-bold text-center mb-12">How It Works</h3>
+        <h3 className="text-3xl font-bold text-center mb-12 bg-clip-text text-transparent bg-gradient-to-r from-willow-dark to-willow-light">
+          How It Works
+        </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {steps.map((step, index) => (
             <CardContainer key={index}>
-              <CardBody className="bg-gray-50/80 relative group/card dark:hover:shadow-2xl dark:hover:shadow-emerald-500/[0.1] dark:bg-black/90 dark:border-white/[0.2] border-black/[0.1] w-auto h-auto rounded-xl p-6 border">
+              <CardBody className="bg-gray-50/80 relative group/card dark:hover:shadow-2xl dark:hover:shadow-willow-primary/[0.1] dark:bg-black/90 dark:border-white/[0.2] border-black/[0.1] w-auto h-auto rounded-xl p-6 border">
                 <CardItem
                   translateZ={20}
                   className="text-xl font-bold text-neutral-600 dark:text-white"
                 >
-                  <div className="w-12 h-12 bg-blue-600 text-white flex items-center justify-center rounded-full mb-4">
+                  <div className="w-12 h-12 bg-willow-primary text-white flex items-center justify-center rounded-full mb-4 hover:bg-willow-light transition-colors">
                     {step.number}
                   </div>
                   {step.title}

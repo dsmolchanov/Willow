@@ -30,15 +30,15 @@ const HeroSection: React.FC = () => {
       <div className="mt-8">
         <Button
           borderRadius="0.75rem"
-          className="bg-white text-black border-2 border-slate-800 rounded-xl"
-          borderClassName="bg-[radial-gradient(var(--sky-500)_40%,transparent_60%)] w-[100px] h-[100px] rounded-xl"
+          className="bg-willow-primary text-white border-2 border-willow-dark rounded-xl hover:bg-willow-light"
+          borderClassName="bg-[radial-gradient(var(--willow-primary)_40%,transparent_60%)] w-[100px] h-[100px] rounded-xl"
           containerClassName="p-[1px] hover:scale-105 transition-transform rounded-xl"
           rx="30%"
           ry="30%"
           duration={4000}
           onClick={handleNavigation}
           style={{
-            '--sky-500': 'rgb(14 165 233)',
+            '--willow-primary': '#5DCFA1',
           } as React.CSSProperties}
         >
           Get me onboard

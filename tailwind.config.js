@@ -60,7 +60,11 @@ module.exports = {
         fifth: "moveInCircle 20s ease infinite",
       },
       colors: {
-        // ... your existing color definitions
+        willow: {
+          primary: '#5DCFA1',
+          light: '#7DDBB6',
+          dark: '#4BB88A'
+        },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
