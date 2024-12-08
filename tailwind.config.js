@@ -17,6 +17,14 @@ module.exports = {
           '0%, 100%': { transform: 'scaleY(0.5)' },
           '50%': { transform: 'scaleY(1.5)' },
         },
+        "fade-in": {
+          from: { opacity: 0 },
+          to: { opacity: 1 }
+        },
+        "zoom-in": {
+          from: { transform: "scale(0.95)" },
+          to: { transform: "scale(1)" }
+        },
         moveHorizontal: {
           "0%": {
             transform: "translateX(-50%) translateY(-10%)",
@@ -53,6 +61,8 @@ module.exports = {
       },
       animation: {
         soundWave: 'soundWave 0.5s ease-in-out infinite',
+        "fade-in": "fade-in 300ms ease-out",
+        "zoom-in": "zoom-in 300ms ease-out",
         first: "moveVertical 30s ease infinite",
         second: "moveInCircle 20s reverse infinite",
         third: "moveInCircle 40s linear infinite",
@@ -127,6 +137,15 @@ module.exports = {
           '3': 'hsl(var(--chart-3))',
           '4': 'hsl(var(--chart-4))',
           '5': 'hsl(var(--chart-5))'
+        },
+        gradient: {
+          'bg-start': 'rgb(20, 32,40)',
+          'bg-end': 'rgb(10, 16,20)',
+          'orb': {
+            'primary': 'rgb(93, 207, 161)',
+            'light': 'rgb(125, 219,182)',
+            'dark': 'rgb(75, 184, 138)',
+          }
         }
       },
       fontSize: {
@@ -142,12 +161,17 @@ module.exports = {
         bold: '700'
       },
       backgroundImage: {
-        'gradient-to-t': 'linear-gradient(to top, var(--tw-gradient-stops))'
+        'gradient-to-t': 'linear-gradient(to top, var(--tw-gradient-stops))',
+        'gradient-radial': 'radial-gradient(circleat center, var(--tw-gradient-stops))',
+        'gradient-primary': 'linear-gradient(40deg, var(--gradient-bg-start), var(--gradient-bg-end))',
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)'
+      },
+      mixBlendMode: {
+        'soft-light': 'soft-light',
       }
     }
   },

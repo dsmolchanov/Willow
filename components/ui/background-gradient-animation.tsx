@@ -40,6 +40,7 @@ export const BackgroundGradientAnimation = ({
   const [curY, setCurY] = useState(0);
   const [tgX, setTgX] = useState(0);
   const [tgY, setTgY] = useState(0);
+
   useEffect(() => {
     if (!containerRef.current) return;
     
@@ -97,11 +98,17 @@ export const BackgroundGradientAnimation = ({
     setIsSafari(/^((?!chrome|android).)*safari/i.test(navigator.userAgent));
   }, []);
 
+  const defaultGradientBgStart = "20, 32, 40";
+  const defaultGradientBgEnd = "10, 16, 20";
+  const defaultFirstColor = "93, 207, 161";
+  const defaultSecondColor = "125, 219, 182";
+  const defaultThirdColor = "75, 184, 138";
+
   return (
     <div
       ref={containerRef}
       className={cn(
-        "h-screen w-screen relative overflow-hidden top-0 left-0 bg-[linear-gradient(40deg,var(--gradient-background-start),var(--gradient-background-end))]",
+        "h-screen w-screen relative overflow-hidden top-0 left-0 bg-[linear-gradient(40deg,rgb(var(--tw-gradient-bg-start,20_32_40)),rgb(var(--tw-gradient-bg-end,10_16_20)))]",
         containerClassName
       )}
       onMouseMove={handleMouseMove}

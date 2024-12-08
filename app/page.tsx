@@ -4,16 +4,15 @@ import { BackgroundGradientAnimation } from "@/components/ui/background-gradient
 import HeroSection from "@/components/HeroSection";
 import BenefitsSection from "@/components/BenefitsSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
-import FeaturesSection from "@/components/FeaturesSection";
 import CallToActionSection from "@/components/CallToActionSection";
 
 export default function HomePage() {
   return (
     <>
       <BackgroundGradientAnimation 
-        containerClassName="!h-[80vh]"
+        containerClassName="min-h-[90vh]"
       >
-        <div className="h-full flex items-center justify-center">
+        <div className="h-full w-full flex items-center justify-center py-16">
           <HeroSection />
         </div>
       </BackgroundGradientAnimation>

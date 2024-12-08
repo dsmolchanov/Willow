@@ -3,34 +3,27 @@
 import React from "react";
 import { CardBody, CardContainer, CardItem } from "./ui/3d-card";
 import Image from "next/image";
+import { useLanguage } from "@/context/LanguageContext";
 
-const steps = [
-  {
-    number: 1,
-    title: "Onboarding",
-    description: "Define your unique traits through an engaging avatar conversation to tailor your skill development journey.",
-    image: "/images/onboarding.png"
-  },
-  {
-    number: 2,
-    title: "Personalized Simulations",
-    description: "Participate in conversational simulations that reflect your real-life contexts and challenges.",
-    image: "/images/simulation.png"
-  },
-  {
-    number: 3,
-    title: "Feedback & Growth",
-    description: "Receive actionable feedback and track your progress to master your communication skills over time.",
-    image: "/images/feedback.png"
-  }
-];
+const images = [
+  "/images/onboarding.png",
+  "/images/simulation.png",
+  "/images/feedback.png"
+] as const;
 
 const HowItWorksSection: React.FC = () => {
+  const { t } = useLanguage();
+  const steps = t('howItWorks', 'steps') as Array<{
+    number: number;
+    title: string;
+    description: string;
+  }>;
+
   return (
     <section className="py-16">
       <div className="max-w-7xl mx-auto px-4">
         <h3 className="text-3xl font-bold text-center mb-12 bg-clip-text text-transparent bg-gradient-to-r from-willow-dark to-willow-light">
-          How It Works
+          {t('howItWorks', 'title')}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {steps.map((step, index) => (
@@ -57,7 +50,7 @@ const HowItWorksSection: React.FC = () => {
                 <CardItem translateZ={100} className="w-full mt-4">
                   <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden">
                     <Image
-                      src={step.image}
+                      src={images[index]}
                       alt={step.title}
                       fill
                       className="object-cover object-center group-hover/card:scale-105 transition-transform duration-200"

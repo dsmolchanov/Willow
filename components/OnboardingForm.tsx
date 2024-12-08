@@ -7,6 +7,11 @@ import { Button } from '@/components/ui/button';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useEffect } from 'react';
 
+interface ConversationSession {
+  conversationId: string;
+  // add other session properties if needed
+}
+
 export function Conversation() {
   const router = useRouter();
   const conversation = useConversation({
@@ -28,7 +33,7 @@ export function Conversation() {
       await navigator.mediaDevices.getUserMedia({ audio: true });
       const session = await conversation.startSession({
         agentId: 'doXNIsa8qmit1NjLQxgT',
-      });
+      }) as ConversationSession;
 
       console.log('Started conversation with ID:', session.conversationId);
 
