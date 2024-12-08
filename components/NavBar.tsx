@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react"
 import {
   SignInButton,
   SignedIn,
@@ -7,25 +8,37 @@ import {
   UserButton,
 } from "@clerk/nextjs";
 import Image from 'next/image';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Check, Globe } from "lucide-react";
 import { useLanguage } from '@/context/LanguageContext';
-import { Globe } from "lucide-react";
+import { Button } from "../components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from "../components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../components/ui/popover";
+import { cn } from "../lib/utils";
 
-const languageNames = {
-  en: "English",
-  ru: "Русский"
-} as const;
+const languages = [
+  {
+    value: "en",
+    label: "English",
+  },
+  {
+    value: "ru",
+    label: "Русский",
+  },
+] as const;
 
-export function Navbar() {
+export const NavBar = () => {
   const { language, setLanguage } = useLanguage();
-
-  console.log('Navbar rendered with language:', language);
+  const [open, setOpen] = React.useState(false);
 
   return (
     <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center p-6 bg-transparent backdrop-blur-sm">
@@ -39,34 +52,45 @@ export function Navbar() {
         />
       </div>
       <div className="flex items-center gap-4">
-        <Select
-          value={language}
-          onValueChange={(value: 'en' | 'ru') => {
-            console.log('Selecting language:', value);
-            setLanguage(value);
-          }}
-        >
-          <SelectTrigger 
-            className="w-[40px] h-[40px] p-0 border-0 bg-transparent hover:bg-white/10 transition-colors duration-200"
-          >
-            <Globe className="h-5 w-5 text-white" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-white/90 backdrop-blur-sm border-white/20">
-            <SelectItem 
-              value="en"
-              className="cursor-pointer"
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              role="combobox"
+              aria-expanded={open}
+              className="w-[40px] h-[40px] p-0 hover:bg-white/10"
             >
-              {languageNames.en}
-            </SelectItem>
-            <SelectItem 
-              value="ru"
-              className="cursor-pointer"
-            >
-              {languageNames.ru}
-            </SelectItem>
-          </SelectContent>
-        </Select>
+              <Globe className="h-5 w-5 text-white" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[200px] p-0 bg-white/90 backdrop-blur-sm border-white/20" align="end">
+            <Command>
+              <CommandList>
+                <CommandEmpty>No language found.</CommandEmpty>
+                <CommandGroup>
+                  {languages.map((lang) => (
+                    <CommandItem
+                      key={lang.value}
+                      value={lang.value}
+                      onSelect={(currentValue) => {
+                        setLanguage(currentValue as typeof language);
+                        setOpen(false);
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          language === lang.value ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                      {lang.label}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
         <SignedOut>
           <SignInButton />
         </SignedOut>
