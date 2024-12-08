@@ -5,7 +5,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { Poppins } from 'next/font/google'
 import { BackgroundGradientAnimation } from "@/components/ui/background-gradient-animation";
-import { Navbar } from "@/components/Navbar";
+import { NavBar } from "@/components/NavBar";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { ElevenLabsScript } from "@/components/ElevenLabsScript";
 import { WidgetProvider } from "@/context/WidgetContext";
@@ -31,7 +31,7 @@ export default function RootLayout({
                 <BackgroundGradientAnimation />
               </div>
               <div className="relative z-10 min-h-screen overflow-auto">
-                <Navbar />
+                <NavBar />
                 <main className="pt-20">{children}</main>
               </div>
             </WidgetProvider>
