@@ -1,10 +1,10 @@
 "use client"
 
 import { Suspense } from "react"
-import dynamic from 'next/dynamic'
+import { default as dynamicImport } from 'next/dynamic'
 
 // Dynamically import the InteractiveAvatar component
-const InteractiveAvatarComponent = dynamic(
+const InteractiveAvatarComponent = dynamicImport(
   () => import('@/components/InteractiveAvatar'),
   {
     ssr: false,
