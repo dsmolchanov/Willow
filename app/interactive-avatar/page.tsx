@@ -16,10 +16,9 @@ const InteractiveAvatarComponent = dynamic(
   }
 )
 
+export const dynamic = 'force-dynamic'
+export const runtime = 'edge'
+
 export default function InteractiveAvatarPage() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <InteractiveAvatarComponent />
-    </Suspense>
-  )
+  return <InteractiveAvatarComponent />
 }
