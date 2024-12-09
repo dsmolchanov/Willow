@@ -1,7 +1,10 @@
+"use client"
+
+import { Suspense } from "react"
 import { GraduationCap, CheckSquare, MessageSquare, BookOpen, LogOut } from "lucide-react"
 import {
   Sidebar,
-  SidebarContent,
+  SidebarContent as UISidebarContent,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -37,13 +40,13 @@ const items = [
   },
 ]
 
-export function AppSidebar() {
+function CustomSidebarContent() {
   const { signOut } = useClerk()
   const router = useRouter()
 
   return (
     <Sidebar>
-      <SidebarContent>
+      <UISidebarContent>
         <div className="mb-8 px-3">
           <h2 className="text-2xl font-bold text-slate-900">Willow</h2>
         </div>
@@ -66,7 +69,7 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-      </SidebarContent>
+      </UISidebarContent>
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -81,5 +84,13 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
+  )
+}
+
+export function AppSidebar() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <CustomSidebarContent />
+    </Suspense>
   )
 } 

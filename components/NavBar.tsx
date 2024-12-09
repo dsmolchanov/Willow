@@ -54,48 +54,54 @@ export const NavBar = () => {
           className="object-contain"
         />
       </div>
-      <div className="flex items-center gap-4">
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="ghost"
-              role="combobox"
-              aria-expanded={open}
-              className="w-[40px] h-[40px] p-0 hover:bg-white/10"
-            >
-              <Globe className="h-5 w-5 text-white" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[200px] p-0 bg-white/90 backdrop-blur-sm border-white/20" align="end">
-            <Command>
-              <CommandList>
-                <CommandEmpty>No language found.</CommandEmpty>
-                <CommandGroup>
-                  {languages.map((lang) => (
-                    <CommandItem
-                      key={lang.value}
-                      value={lang.value}
-                      onSelect={(currentValue) => {
-                        setLanguage(currentValue as typeof language);
-                        setOpen(false);
-                      }}
-                    >
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          language === lang.value ? "opacity-100" : "opacity-0"
-                        )}
-                      />
-                      {lang.label}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
+      <div className="flex items-center gap-3">
+        <div className="bg-white border border-gray-200 rounded-lg h-9 flex items-center">
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                role="combobox"
+                aria-expanded={open}
+                className="h-8 w-8 p-0 hover:bg-gray-100"
+              >
+                <Globe className="h-4 w-4 text-gray-700" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[200px] p-0 bg-white border-gray-200" align="end">
+              <Command>
+                <CommandList>
+                  <CommandEmpty>No language found.</CommandEmpty>
+                  <CommandGroup>
+                    {languages.map((lang) => (
+                      <CommandItem
+                        key={lang.value}
+                        value={lang.value}
+                        onSelect={(currentValue) => {
+                          setLanguage(currentValue as typeof language);
+                          setOpen(false);
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            language === lang.value ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        {lang.label}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
         <SignedOut>
-          <SignInButton />
+          <div className="bg-white border border-gray-200 rounded-lg h-9 flex items-center px-3">
+            <SignInButton>
+              <button className="text-sm text-gray-700">Sign In</button>
+            </SignInButton>
+          </div>
         </SignedOut>
         <SignedIn>
           <UserButton />
