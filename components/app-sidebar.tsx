@@ -16,6 +16,10 @@ import {
 import { useClerk } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 const items = [
   {
@@ -43,6 +47,7 @@ const items = [
 function CustomSidebarContent() {
   const { signOut } = useClerk()
   const router = useRouter()
+  const pathname = usePathname()
 
   return (
     <Sidebar>
