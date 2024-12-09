@@ -22,7 +22,7 @@ const HeroSection: React.FC = () => {
           {t('hero', 'subtitle')}{" "}
           <FlipWords 
             words={tools}
-            className="inline-block" 
+            className="inline-block text-white font-bold" 
             duration={3000} 
           />
         </div>

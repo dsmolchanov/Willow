@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -9,7 +10,7 @@ import BenefitsSection from "@/components/BenefitsSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
 import CallToActionSection from "@/components/CallToActionSection";
 
-export default function HomePage() {
+function HomeContent() {
   const { isLoaded, isSignedIn } = useUser();
   const router = useRouter();
 
@@ -35,5 +36,13 @@ export default function HomePage() {
         <CallToActionSection />
       </div>
     </>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <HomeContent />
+    </Suspense>
   );
 }
