@@ -1,12 +1,13 @@
 'use client'
 
+import { Suspense } from "react"
 import { useEffect, useState } from 'react'
 import { useUser, useAuth } from '@clerk/nextjs'
 import type { ConversationListItem } from '@/lib/types'
 import { formatDistanceToNow, formatDuration, intervalToDuration } from 'date-fns'
 import { createClerkSupabaseClient } from '@/lib/supabaseClient'
 
-export default function ConversationsPage() {
+function ConversationsContent() {
   const { user } = useUser()
   const { getToken } = useAuth()
   const [conversations, setConversations] = useState<ConversationListItem[]>([])
@@ -84,16 +85,8 @@ export default function ConversationsPage() {
             key={conv.conversation_id}
             className="grid grid-cols-5 gap-4 border-b border-gray-200 p-4 last:border-0"
           >
-            <div className="flex flex-col text-gray-600">
-              <span className="text-sm font-medium text-gray-900">
-                {new Date(conv.start_time).toLocaleTimeString('en-US', {
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-              </span>
-              <span className="text-xs">
-                {formatDistanceToNow(new Date(conv.start_time), { addSuffix: true })}
-              </span>
+            <div className="text-gray-600">
+              {formatDistanceToNow(new Date(conv.start_time), { addSuffix: true })}
             </div>
             <div>
               <span
@@ -117,5 +110,13 @@ export default function ConversationsPage() {
         ))}
       </div>
     </div>
+  )
+}
+
+export default function ConversationsPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ConversationsContent />
+    </Suspense>
   )
 } 
