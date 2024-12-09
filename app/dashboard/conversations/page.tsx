@@ -7,6 +7,50 @@ import type { ConversationListItem } from '@/lib/types'
 import { formatDistanceToNow, formatDuration, intervalToDuration } from 'date-fns'
 import { createClerkSupabaseClient } from '@/lib/supabaseClient'
 
+// Separate component for the table content
+function ConversationsTable({ conversations }: { conversations: ConversationListItem[] }) {
+  return (
+    <div className="rounded-lg border border-gray-200">
+      <div className="grid grid-cols-5 gap-4 border-b border-gray-200 bg-gray-50 p-4 font-medium">
+        <div>Time</div>
+        <div>Status</div>
+        <div>Duration</div>
+        <div>Replies</div>
+        <div>Actions</div>
+      </div>
+      {conversations.map((conv) => (
+        <div
+          key={conv.conversation_id}
+          className="grid grid-cols-5 gap-4 border-b border-gray-200 p-4 last:border-0"
+        >
+          <div className="text-gray-600">
+            {formatDistanceToNow(new Date(conv.start_time), { addSuffix: true })}
+          </div>
+          <div>
+            <span
+              className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                conv.status === 'success'
+                  ? 'bg-green-100 text-green-800'
+                  : conv.status === 'failed'
+                  ? 'bg-red-100 text-red-800'
+                  : 'bg-gray-100 text-gray-800'
+              }`}
+            >
+              {conv.status}
+            </span>
+          </div>
+          <div>{conv.duration}</div>
+          <div>{conv.replics_number}</div>
+          <div>
+            <button className="text-blue-600 hover:text-blue-800">View Details</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Component with data fetching logic
 function ConversationsContent() {
   const { user } = useUser()
   const { getToken } = useAuth()
@@ -72,47 +116,14 @@ function ConversationsContent() {
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold">Conversations</h1>
-      <div className="rounded-lg border border-gray-200">
-        <div className="grid grid-cols-5 gap-4 border-b border-gray-200 bg-gray-50 p-4 font-medium">
-          <div>Time</div>
-          <div>Status</div>
-          <div>Duration</div>
-          <div>Replies</div>
-          <div>Actions</div>
-        </div>
-        {conversations.map((conv) => (
-          <div
-            key={conv.conversation_id}
-            className="grid grid-cols-5 gap-4 border-b border-gray-200 p-4 last:border-0"
-          >
-            <div className="text-gray-600">
-              {formatDistanceToNow(new Date(conv.start_time), { addSuffix: true })}
-            </div>
-            <div>
-              <span
-                className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                  conv.status === 'success'
-                    ? 'bg-green-100 text-green-800'
-                    : conv.status === 'failed'
-                    ? 'bg-red-100 text-red-800'
-                    : 'bg-gray-100 text-gray-800'
-                }`}
-              >
-                {conv.status}
-              </span>
-            </div>
-            <div>{conv.duration}</div>
-            <div>{conv.replics_number}</div>
-            <div>
-              <button className="text-blue-600 hover:text-blue-800">View Details</button>
-            </div>
-          </div>
-        ))}
-      </div>
+      <Suspense fallback={<div>Loading conversations...</div>}>
+        <ConversationsTable conversations={conversations} />
+      </Suspense>
     </div>
   )
 }
 
+// Main page component
 export default function ConversationsPage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
