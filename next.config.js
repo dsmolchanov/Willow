@@ -3,7 +3,9 @@ const nextConfig = {
     reactStrictMode: true,
     swcMinify: true,
     experimental: {
-      esmExternals: 'loose'
+      esmExternals: 'loose',
+      appDir: true,
+      serverActions: true,
     },
     eslint: {
       ignoreDuringBuilds: true,
@@ -13,6 +15,35 @@ const nextConfig = {
         // your project has type errors. Use this to temporarily bypass type checking.
         // We recommend fixing type errors instead.
         ignoreBuildErrors: true,
+    },
+    async headers() {
+      return [
+        {
+          source: '/:path*',
+          headers: [
+            {
+              key: 'Cache-Control',
+              value: 'no-store, must-revalidate',
+            },
+          ],
+        },
+      ]
+    },
+    async rewrites() {
+      return {
+        beforeFiles: [
+          {
+            source: '/:path*',
+            has: [
+              {
+                type: 'query',
+                key: '_rsc',
+              },
+            ],
+            destination: '/:path*',
+          },
+        ],
+      }
     },
 };
   
