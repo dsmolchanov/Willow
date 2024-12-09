@@ -8,10 +8,14 @@ import { Button } from '@/components/ui/button';
 import { PhoneCall, PhoneOff } from 'lucide-react';
 import { WaveAnimation } from './ui/wave-animation';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
+import { useUser } from "@clerk/nextjs";
 
 export function ElevenLabsWidget() {
+  const router = useRouter();
+  const { isSignedIn, user } = useUser();
   const { language, t } = useLanguage();
-  const { startConversation, endConversation } = useConversationTracking();
+  const { startTracking, endTracking, conversationData, createConversationRecord } = useConversationTracking();
   const [hasAudioPermission, setHasAudioPermission] = useState(false);
   
   const agentId = language === 'ru' 
@@ -20,13 +24,71 @@ export function ElevenLabsWidget() {
 
   const conversation = useConversation({
     onConnect: () => console.log('Connected to ElevenLabs'),
-    onDisconnect: () => {
-      console.log('Disconnected from ElevenLabs');
-      endConversation();
-    },
+    onDisconnect: () => console.log('Disconnected from ElevenLabs'),
     onMessage: (message) => console.log('Message:', message),
     onError: (error) => console.error('Error:', error),
   });
+
+  const handleStart = useCallback(async () => {
+    try {
+      const conversationId = await conversation.startSession({ agentId });
+      console.log('ElevenLabs session response:', conversationId);
+      
+      if (conversationId && typeof conversationId === 'string') {
+        // Only store in memory, no database operation
+        startTracking({
+          elevenLabsConversationId: conversationId,
+          agentId,
+          startTime: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('Failed to start conversation:', error);
+    }
+  }, [conversation, agentId, startTracking]);
+
+  const handleStop = useCallback(async () => {
+    const endTime = new Date().toISOString();
+    
+    try {
+      // End ElevenLabs session
+      await conversation.endSession();
+      
+      // Update memory storage with end time
+      endTracking(endTime);
+      
+      // Handle navigation
+      if (isSignedIn && user) {
+        // If user is signed in, we should handle the database operation here
+        if (conversationData) {
+          await createConversationRecord(user.id, {
+            ...conversationData,
+            endTime
+          });
+        }
+        router.push('/dashboard');
+      } else if (conversationData) {
+        // If not signed in, pass data through URL
+        const params = new URLSearchParams({
+          reason: 'evaluation',
+          conversation: conversationData.elevenLabsConversationId,
+          agent: conversationData.agentId,
+          start_time: conversationData.startTime,
+          end_time: endTime,
+          redirect_url: `/sign-in?${new URLSearchParams({
+            conversation: conversationData.elevenLabsConversationId,
+            agent: conversationData.agentId,
+            start_time: conversationData.startTime,
+            end_time: endTime
+          })}`
+        });
+        
+        router.push(`/sign-up?${params}`);
+      }
+    } catch (error) {
+      console.error('Failed to stop conversation:', error);
+    }
+  }, [conversation, isSignedIn, router, conversationData, endTracking, user, createConversationRecord]);
 
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ audio: true })
@@ -38,26 +100,6 @@ export function ElevenLabsWidget() {
         console.error('Audio permission denied:', error);
       });
   }, []);
-
-  const handleStart = useCallback(async () => {
-    try {
-      const response = await conversation.startSession({ agentId });
-      if (response && typeof response === 'string') {
-        startConversation(agentId);
-      }
-    } catch (error) {
-      console.error('Failed to start conversation:', error);
-    }
-  }, [conversation, agentId, startConversation]);
-
-  const handleStop = useCallback(async () => {
-    try {
-      await conversation.endSession();
-      endConversation();
-    } catch (error) {
-      console.error('Failed to stop conversation:', error);
-    }
-  }, [conversation, endConversation]);
 
   const isConnected = conversation.status === 'connected';
 

@@ -193,7 +193,7 @@ export const BackgroundGradientAnimation = ({
             ref={interactiveRef}
             className={cn(
               `absolute [background:radial-gradient(circle_at_center,_rgba(var(--pointer-color),_1)_0,_rgba(var(--pointer-color),_0)_50%)_no-repeat]`,
-              `[mix-blend-mode:var(--blending-value)] w-[150%] h-[150%]`,
+              `[mix-blend-mode:var(--blending-value)] w-[75%] h-[75%]`,
               `opacity-80`
             )}
           ></div>

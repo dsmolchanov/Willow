@@ -1,35 +1,73 @@
+// useConversationTracking.ts
 "use client";
 
 import { useCallback, useState } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { useAuth } from '@clerk/nextjs';
+import { useUser } from '@clerk/nextjs';
 
-type CallStatus = 'processing' | 'done';
+const CALL_STATUS = {
+  UNKNOWN: 'unknown',
+  SUCCESS: 'success',
+  FAILURE: 'failure'
+} as const;
+
+type CallStatus = typeof CALL_STATUS[keyof typeof CALL_STATUS];
+
+interface ConversationData {
+  elevenLabsConversationId: string;
+  agentId: string;
+  startTime: string;
+  endTime?: string;
+}
 
 export function useConversationTracking() {
-  const [conversationDbId, setConversationDbId] = useState<number | null>(null);
+  const [conversationData, setConversationData] = useState<ConversationData | null>(null);
   const supabase = createClientComponentClient();
-  const { userId, isLoaded, isSignedIn } = useAuth();
 
-  console.log('Auth state:', { userId, isLoaded, isSignedIn });
+  const startTracking = useCallback((data: ConversationData) => {
+    console.log('Starting conversation tracking:', {
+      ...data,
+      type: 'memory-only'
+    });
+    setConversationData(data);
+  }, []);
 
-  const startConversation = useCallback(async (agentId: string) => {
-    console.log('Starting conversation tracking:', { agentId, userId });
+  const endTracking = useCallback((endTime: string) => {
+    setConversationData(prev => {
+      if (!prev) return null;
+      console.log('Ending conversation tracking:', {
+        ...prev,
+        endTime,
+        type: 'memory-only'
+      });
+      return { ...prev, endTime };
+    });
+  }, []);
 
-    if (!isSignedIn || !userId) {
-      console.log('User not signed in, skipping database operation');
-      return;
+  const createConversationRecord = useCallback(async (
+    userId: string, 
+    data: ConversationData
+  ) => {
+    if (!data.endTime) {
+      console.error('Cannot create conversation record without end time');
+      return null;
     }
 
     try {
-      const { data, error } = await supabase
+      console.log('Creating conversation record in database:', {
+        userId,
+        ...data
+      });
+
+      const { data: record, error } = await supabase
         .from('user_conversations')
         .insert({
           clerk_id: userId,
-          agent_id: agentId,
-          elevenlabs_conversation_id: `${agentId}_${Date.now()}`,
-          status: 'processing' as CallStatus,
-          start_time: new Date().toISOString(),
+          agent_id: data.agentId,
+          elevenlabs_conversation_id: data.elevenLabsConversationId,
+          status: CALL_STATUS.SUCCESS,
+          start_time: data.startTime,
+          end_time: data.endTime,
           metadata: {},
           analysis: {},
           data_collection_results: {}
@@ -38,61 +76,27 @@ export function useConversationTracking() {
         .single();
 
       if (error) {
-        console.error('Failed to insert conversation record:', error);
+        console.error('Failed to create conversation record:', error);
         throw error;
       }
 
-      console.log('Successfully created conversation record:', data);
-      setConversationDbId(data.conversation_id);
+      console.log('Successfully created conversation record:', record);
+      return record;
 
     } catch (error) {
-      console.error('Error in startConversation:', error);
-      console.error('Error details:', {
-        userId,
-        agentId,
-        timestamp: new Date().toISOString()
-      });
+      console.error('Error in createConversationRecord:', error);
+      throw error;
+    } finally {
+      // Clear the conversation data from memory
+      setConversationData(null);
     }
-  }, [supabase, userId, isSignedIn]);
-
-  const endConversation = useCallback(async () => {
-    console.log('Ending conversation:', { conversationDbId });
-
-    if (!conversationDbId) {
-      console.log('No active conversation to end');
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('user_conversations')
-        .update({
-          status: 'done' as CallStatus,
-          end_time: new Date().toISOString()
-        })
-        .eq('conversation_id', conversationDbId);
-
-      if (error) {
-        console.error('Failed to update conversation record:', error);
-        throw error;
-      }
-
-      console.log('Successfully ended conversation:', conversationDbId);
-      setConversationDbId(null);
-
-    } catch (error) {
-      console.error('Error in endConversation:', error);
-      console.error('Error details:', {
-        conversationDbId,
-        timestamp: new Date().toISOString()
-      });
-    }
-  }, [conversationDbId, supabase]);
+  }, [supabase]);
 
   return {
-    startConversation,
-    endConversation,
-    conversationDbId,
-    isActive: !!conversationDbId
+    startTracking,
+    endTracking,
+    createConversationRecord,
+    conversationData,
+    clearConversationData: () => setConversationData(null)
   };
 }

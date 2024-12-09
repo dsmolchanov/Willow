@@ -1,4 +1,5 @@
 import { default as dynamicImport } from 'next/dynamic'
+import { PostSignupHandler } from '@/components/PostSignupHandler'
 
 const DashboardComponent = dynamicImport(
   () => import('@/components/DashboardPage'),
@@ -22,5 +23,10 @@ export const generateStaticParams = () => {
 }
 
 export default function DashboardPage() {
-  return <DashboardComponent />
+  return (
+    <>
+      <PostSignupHandler />
+      <DashboardComponent />
+    </>
+  )
 } 

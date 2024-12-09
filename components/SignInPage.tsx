@@ -1,25 +1,42 @@
 "use client";
-import { SignUp } from "@clerk/nextjs";
-import { BackgroundGradientAnimation } from "@/components/ui/background-gradient-animation";
-import { useSearchParams, useRouter } from 'next/navigation';
-import { useConversationTracking } from '@/hooks/useConversationTracking';
 
-export default function SignUpPage() {
-  const searchParams = useSearchParams();
+import { SignIn } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import dynamic from 'next/dynamic';
+
+const BackgroundGradientAnimation = dynamic(
+  () => import("@/components/ui/background-gradient-animation").then(mod => mod.BackgroundGradientAnimation),
+  { 
+    ssr: false,
+    loading: () => <div className="min-h-screen bg-gradient-to-b from-black to-gray-900" />
+  }
+);
+
+export default function SignInPage() {
+  const { isLoaded, isSignedIn } = useUser();
   const router = useRouter();
-  const { updateConversationWithUserId } = useConversationTracking();
-  const reason = searchParams.get('reason');
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      router.replace("/dashboard");
+    }
+  }, [isLoaded, isSignedIn, router]);
+
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <BackgroundGradientAnimation containerClassName="min-h-screen">
       <div className="w-full min-h-screen flex items-center justify-center">
         <div className="relative z-10">
-          {reason === 'evaluation' && (
-            <div className="max-w-md mx-auto mb-6 p-4 bg-willow-primary/10 rounded-lg text-slate-700 text-center">
-              Please sign up to save your evaluation results and continue your language training journey.
-            </div>
-          )}
-          <SignUp 
+          <SignIn 
             appearance={{
               elements: {
                 rootBox: "mx-auto",
@@ -46,12 +63,13 @@ export default function SignUpPage() {
               },
             }}
             routing="path"
-            path="/sign-up"
-            afterSignUpUrl="/dashboard"
+            path="/sign-in"
+            redirectUrl="/dashboard"
+            afterSignInUrl="/dashboard"
             signUpUrl="/sign-up"
           />
         </div>
       </div>
     </BackgroundGradientAnimation>
   );
-}
+} 
