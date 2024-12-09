@@ -1,24 +1,15 @@
-"use client"
+// app/not-found.tsx
+"use client";
 
-import { Suspense } from 'react'
-import dynamic from 'next/dynamic'
+import { Suspense } from 'react';
+import NotFoundPage from '@/components/NotFoundPage';
 
-const NotFoundClient = dynamic(
-  () => import('@/components/NotFoundPage'),
-  { 
-    ssr: false,
-    loading: () => (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse">Loading...</div>
-      </div>
-    )
-  }
-)
+export const dynamic = 'force-dynamic';
 
-export default function NotFoundPage() {
+export default function NotFound() {
   return (
-    <Suspense>
-      <NotFoundClient />
+    <Suspense fallback={<div>Loading...</div>}>
+      <NotFoundPage />
     </Suspense>
-  )
-} 
+  );
+}
