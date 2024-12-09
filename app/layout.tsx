@@ -9,6 +9,7 @@ import { NavBar } from "@/components/NavBar";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { ElevenLabsScript } from "@/components/ElevenLabsScript";
 import { WidgetProvider } from "@/context/WidgetContext";
+import { usePathname } from 'next/navigation';
 
 const poppins = Poppins({ 
   subsets: ['latin'],
@@ -20,6 +21,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const isDashboard = pathname?.startsWith('/dashboard');
+
   return (
     <ClerkProvider>
       <html lang="en">
@@ -31,8 +35,10 @@ export default function RootLayout({
                 <BackgroundGradientAnimation />
               </div>
               <div className="relative z-10 min-h-screen overflow-auto">
-                <NavBar />
-                <main className="pt-20">{children}</main>
+                {!isDashboard && <NavBar />}
+                <main className={!isDashboard ? "pt-20" : undefined}>
+                  {children}
+                </main>
               </div>
             </WidgetProvider>
           </LanguageProvider>

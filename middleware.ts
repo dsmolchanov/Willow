@@ -1,17 +1,14 @@
 // middleware.ts
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { authMiddleware } from "@clerk/nextjs/server";
 
-const isProtectedRoute = createRouteMatcher(['/protected(.*)', '/dashboard(.*)'])
-
-export default clerkMiddleware((auth, request) => {
-  if (isProtectedRoute(request)) {
-    auth().protect()
-  }
-})
+export default authMiddleware({
+  // Routes that can be accessed while signed out
+  publicRoutes: ["/", "/sign-in", "/sign-up", "/onboarding", "/interactive-avatar"],
+  // Routes that can always be accessed, and have
+  // no authentication information
+  ignoredRoutes: ["/api/webhook"],
+});
 
 export const config = {
-  matcher: [
-    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    '/(api|trpc)(.*)',
-  ],
-}
+  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
+};

@@ -6,6 +6,7 @@ import {
   SignedIn,
   SignedOut,
   UserButton,
+  useAuth,
 } from "@clerk/nextjs";
 import Image from 'next/image';
 import { Check, Globe } from "lucide-react";
@@ -24,6 +25,7 @@ import {
   PopoverTrigger,
 } from "../components/ui/popover";
 import { cn } from "../lib/utils";
+import Link from "next/link";
 
 const languages = [
   {
@@ -39,6 +41,7 @@ const languages = [
 export const NavBar = () => {
   const { language, setLanguage } = useLanguage();
   const [open, setOpen] = React.useState(false);
+  const { isSignedIn } = useAuth();
 
   return (
     <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center p-6 bg-transparent backdrop-blur-sm">
@@ -97,6 +100,14 @@ export const NavBar = () => {
         <SignedIn>
           <UserButton />
         </SignedIn>
+        {isSignedIn && (
+          <Link 
+            href="/dashboard" 
+            className="text-sm font-semibold leading-6 text-gray-900"
+          >
+            Dashboard
+          </Link>
+        )}
       </div>
     </header>
   );
