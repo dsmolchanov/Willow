@@ -18,11 +18,6 @@ const CallToActionSection: React.FC = () => {
         <p className="text-lg mb-32 text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
           {t('callToAction', 'description')}
         </p>
-        {!isHeroWidgetVisible && (
-          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
-            <ElevenLabsWidget />
-          </div>
-        )}
       </div>
     </section>
   );

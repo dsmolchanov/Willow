@@ -1,15 +1,27 @@
 "use client";
 
-import React from 'react';
-import { TheorySidebar } from '@/components/TheorySidebar';
+import { Suspense } from 'react';
+import dynamicImport from 'next/dynamic';
 
-const TheoryPage = () => {
+const TheoryClient = dynamicImport(
+  () => import('@/components/TheorySidebar').then(mod => ({ default: mod.TheorySidebar })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse">Loading theory...</div>
+      </div>
+    ),
+  }
+);
+
+export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
+
+export default function TheoryPage() {
   return (
-    <div className="h-full">
-      <h1 className="text-2xl font-bold mb-4">Theory</h1>
-      <TheorySidebar />
-    </div>
+    <Suspense>
+      <TheoryClient />
+    </Suspense>
   );
-};
-
-export default TheoryPage;
+}

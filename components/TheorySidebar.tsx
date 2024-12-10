@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import ReactMarkdown from 'react-markdown';
 import { ChevronRight } from "lucide-react";
-import cn from 'classnames';
+import type { Database } from "@/lib/database.types";
 
 interface Skill {
   skill_id: number;
@@ -16,10 +18,13 @@ interface Skill {
 }
 
 export function TheorySidebar() {
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
-  const [expandedSkills, setExpandedSkills] = useState<Set<number>>(new Set());
-  const supabase = createClientComponentClient();
+  const router = useRouter();
+  const { isLoaded, isSignedIn, user } = useUser();
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [skills, setSkills] = React.useState<Skill[]>([]);
+  const [selectedSkill, setSelectedSkill] = React.useState<Skill | null>(null);
+  const [expandedSkills, setExpandedSkills] = React.useState<Set<number>>(new Set());
+  const supabase = createClientComponentClient<Database>();
 
   const extractNumbers = (name: string): number[] => {
     const match = name.match(/^(\d+(\.\d+)?)/);
@@ -47,7 +52,7 @@ export function TheorySidebar() {
     return [...skills].sort(compareSkills);
   };
 
-  useEffect(() => {
+  React.useEffect(() => {
     const fetchSkills = async () => {
       const { data, error } = await supabase
         .from('skills')
@@ -158,7 +163,6 @@ export function TheorySidebar() {
             
             <ReactMarkdown
               components={{
-                // Customize heading styles
                 h1: ({node, ...props}) => (
                   <h1 className="text-2xl font-bold mt-8 mb-4 text-gray-900" {...props} />
                 ),
@@ -171,30 +175,24 @@ export function TheorySidebar() {
                 h4: ({node, ...props}) => (
                   <h4 className="text-base font-medium mt-3 mb-2 text-gray-600" {...props} />
                 ),
-                // Style paragraphs
                 p: ({node, ...props}) => (
                   <p className="my-4 text-gray-600 leading-relaxed" {...props} />
                 ),
-                // Style lists
                 ul: ({node, ...props}) => (
                   <ul className="my-4 list-disc list-inside space-y-2" {...props} />
                 ),
                 ol: ({node, ...props}) => (
                   <ol className="my-4 list-decimal list-inside space-y-2" {...props} />
                 ),
-                // Style list items
                 li: ({node, ...props}) => (
                   <li className="text-gray-600 ml-4" {...props} />
                 ),
-                // Style bold text
                 strong: ({node, ...props}) => (
                   <strong className="font-semibold text-gray-900" {...props} />
                 ),
-                // Style emphasis/italic
                 em: ({node, ...props}) => (
                   <em className="italic text-gray-700" {...props} />
                 ),
-                // Style blockquotes
                 blockquote: ({node, ...props}) => (
                   <blockquote className="border-l-4 border-gray-200 pl-4 my-4 italic text-gray-600" {...props} />
                 ),

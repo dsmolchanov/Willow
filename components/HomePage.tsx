@@ -4,6 +4,7 @@ import { useUser } from "@clerk/nextjs";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from 'next/dynamic';
+import { ElevenLabsWidget } from "@/components/ElevenLabsWidget";
 
 // Dynamically import components
 const BackgroundGradientAnimation = dynamic(
@@ -44,6 +45,10 @@ export default function HomePage() {
         <BenefitsSection />
         <HowItWorksSection />
         <CallToActionSection />
+      </div>
+
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
+        <ElevenLabsWidget />
       </div>
     </>
   );
