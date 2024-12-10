@@ -61,8 +61,11 @@ function CustomSidebarContent() {
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <Link href={item.url} passHref legacyBehavior>
-                    <SidebarMenuButton asChild>
+                  <Link 
+                    href={item.url} 
+                    className="w-full cursor-pointer"
+                  >
+                    <SidebarMenuButton>
                       <div className="flex items-center gap-2">
                         <item.icon className="h-5 w-5" />
                         <span>{item.title}</span>
