@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY')
+const XI_API_KEY = Deno.env.get('XI_API_KEY')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
@@ -16,11 +16,11 @@ interface ElevenLabsResponse {
 }
 
 interface ConversationRequest {
-  conversation_id: number;
-  clerk_id: string;
-  agent_id: string;
-  elevenlabs_conversation_id: string;
-  end_time: string;
+  conversationId: number;
+  clerkId: string;
+  agentId: string;
+  elevenlabsConversationId: string;
+  endTime: string;
   status: string;
 }
 
@@ -33,7 +33,7 @@ async function fetchElevenLabsData(conversationId: string): Promise<ElevenLabsRe
   const options = {
     method: 'GET',
     headers: {
-      'xi-api-key': ELEVENLABS_API_KEY,
+      'xi-api-key': XI_API_KEY,
     },
   };
 
@@ -58,16 +58,16 @@ serve(async (req) => {
     const conversation: ConversationRequest = await req.json();
     console.log('Processing conversation:', conversation);
 
-    if (!conversation.elevenlabs_conversation_id) {
+    if (!conversation.elevenlabsConversationId) {  // Changed from elevenlabs_conversation_id
       throw new Error('No ElevenLabs conversation ID provided');
     }
 
     // Fetch data from ElevenLabs
-    const data = await fetchElevenLabsData(conversation.elevenlabs_conversation_id);
+    const data = await fetchElevenLabsData(conversation.elevenlabsConversationId);  // Changed from elevenlabs_conversation_id
     console.log('ElevenLabs response:', data);
 
     if (data.status !== 'done') {
-      console.log(`Conversation ${conversation.elevenlabs_conversation_id} not ready, status: ${data.status}`);
+      console.log(`Conversation ${conversation.elevenlabsConversationId} not ready, status: ${data.status}`);
       return new Response(
         JSON.stringify({ message: 'Conversation not ready' }),
         { headers: { 'Content-Type': 'application/json' } }
@@ -76,8 +76,16 @@ serve(async (req) => {
 
     // Calculate metrics
     const replicsNumber = countReplies(data.transcript);
+    const duration = data.metadata?.call_duration_secs || 0;
 
-    // Update the conversation record
+    // Debug logs
+    console.log('Attempting to update conversation:', {
+      conversation_id: conversation.conversationId,  // Changed from conversation_id
+      type: typeof conversation.conversationId,
+      full_conversation: conversation
+    });
+
+    // Update the conversation record with exact column types
     const { error: updateError } = await supabase
       .from('user_conversations')
       .update({
@@ -85,20 +93,31 @@ serve(async (req) => {
         metadata: data.metadata,
         analysis: data.analysis,
         data_collection_results: data.analysis.data_collection_results,
-        replics_number: replicsNumber
+        replics_number: replicsNumber,
+        duration: duration,
+        status: 'processed'
       })
-      .eq('conversation_id', conversation.conversation_id);
+      .eq('conversation_id', conversation.conversationId)  // Changed from conversation_id
+      .returns();
+
+    console.log('Update result:', { 
+      success: !updateError,
+      error: updateError,
+      conversation_id: conversation.conversationId,  // Changed from conversation_id
+      duration: duration,
+      status: 'processed'
+    });
 
     if (updateError) {
       console.error('Error updating conversation:', updateError);
-      throw updateError;
+      throw new Error(`Database update failed: ${updateError.message} (Code: ${updateError.code})`);
     }
 
-    console.log(`Successfully processed conversation ${conversation.conversation_id}`);
+    console.log(`Successfully processed conversation ${conversation.conversationId}`);  // Changed from conversation_id
     return new Response(
       JSON.stringify({ 
         message: 'Conversation processed successfully',
-        conversation_id: conversation.conversation_id 
+        conversation_id: conversation.conversationId  // Changed from conversation_id
       }),
       { headers: { 'Content-Type': 'application/json' } }
     );
@@ -110,4 +129,4 @@ serve(async (req) => {
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
-}); 
+});

@@ -53,43 +53,58 @@ export function useConversationTracking() {
       return null;
     }
 
-    try {
-      console.log('Creating conversation record in database:', {
-        userId,
-        ...data
-      });
+    const maxRetries = 3;
+    let attempt = 0;
 
-      const { data: record, error } = await supabase
-        .from('user_conversations')
-        .insert({
-          clerk_id: userId,
-          agent_id: data.agentId,
-          elevenlabs_conversation_id: data.elevenLabsConversationId,
-          status: CALL_STATUS.SUCCESS,
-          start_time: data.startTime,
-          end_time: data.endTime,
-          metadata: {},
-          analysis: {},
-          data_collection_results: {}
-        })
-        .select()
-        .single();
+    while (attempt < maxRetries) {
+      try {
+        console.log(`Creating conversation record in database (attempt ${attempt + 1}):`, {
+          userId,
+          ...data
+        });
 
-      if (error) {
-        console.error('Failed to create conversation record:', error);
-        throw error;
+        const { data: record, error } = await supabase
+          .from('user_conversations')
+          .insert({
+            clerk_id: userId,
+            agent_id: data.agentId,
+            elevenlabs_conversation_id: data.elevenLabsConversationId,
+            status: CALL_STATUS.SUCCESS,
+            start_time: data.startTime,
+            end_time: data.endTime,
+            metadata: {},
+            analysis: {},
+            data_collection_results: {}
+          })
+          .select()
+          .single();
+
+        if (error) {
+          if (error.code === '23503' && attempt < maxRetries - 1) {
+            // Foreign key violation - wait a bit and retry
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+            attempt++;
+            continue;
+          }
+          console.error('Failed to create conversation record:', error);
+          throw error;
+        }
+
+        console.log('Successfully created conversation record:', record);
+        return record;
+
+      } catch (error) {
+        if (attempt === maxRetries - 1) {
+          console.error('Error in createConversationRecord:', error);
+          throw error;
+        }
+        attempt++;
       }
-
-      console.log('Successfully created conversation record:', record);
-      return record;
-
-    } catch (error) {
-      console.error('Error in createConversationRecord:', error);
-      throw error;
-    } finally {
-      // Clear the conversation data from memory
-      setConversationData(null);
     }
+    
+    // Clear the conversation data from memory
+    setConversationData(null);
+    return null;
   }, [supabase]);
 
   return {

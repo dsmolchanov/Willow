@@ -18,11 +18,14 @@ export default function SignInPage() {
   const { isLoaded, isSignedIn } = useUser();
   const router = useRouter();
 
-  useEffect(() => {
-    if (isLoaded && isSignedIn) {
-      router.replace("/dashboard");
+  if (isLoaded && isSignedIn) {
+    try {
+      router.push("/dashboard");
+    } catch (error) {
+      console.error("Navigation error:", error);
     }
-  }, [isLoaded, isSignedIn, router]);
+    return null;
+  }
 
   if (!isLoaded) {
     return (
@@ -64,9 +67,6 @@ export default function SignInPage() {
             }}
             routing="path"
             path="/sign-in"
-            redirectUrl="/dashboard"
-            afterSignInUrl="/dashboard"
-            signUpUrl="/sign-up"
           />
         </div>
       </div>
