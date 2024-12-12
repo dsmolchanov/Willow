@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import dynamic from 'next/dynamic';
 import { ElevenLabsWidget } from "@/components/ElevenLabsWidget";
 import { BackgroundGradientAnimation } from "@/components/ui/background-gradient-animation";
+import { useLanguage } from '@/context/LanguageContext';
 
 const HeroSection = dynamic(() => import("@/components/HeroSection"), { ssr: false });
 const BenefitsSection = dynamic(() => import("@/components/BenefitsSection"), { ssr: false });
@@ -15,6 +16,11 @@ const CallToActionSection = dynamic(() => import("@/components/CallToActionSecti
 export default function HomePage() {
   const { isLoaded, isSignedIn } = useUser();
   const router = useRouter();
+  const { language } = useLanguage();
+  
+  const agentId = language === 'ru' 
+    ? "doXNIsa8qmit1NjLQxgT"
+    : "cxRQ5scm1qhlOVdadUFp";
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
@@ -43,7 +49,7 @@ export default function HomePage() {
       </div>
 
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
-        <ElevenLabsWidget />
+        <ElevenLabsWidget agentId={agentId} />
       </div>
     </>
   );

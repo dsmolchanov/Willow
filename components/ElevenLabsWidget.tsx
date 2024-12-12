@@ -11,17 +11,18 @@ import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useUser } from "@clerk/nextjs";
 
-export function ElevenLabsWidget() {
+interface ElevenLabsWidgetProps {
+  agentId: string;
+  translationPath?: 'widget' | 'buddha.widget';
+}
+
+export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: ElevenLabsWidgetProps) {
   const router = useRouter();
   const { isSignedIn, user } = useUser();
   const { language, t } = useLanguage();
   const { startTracking, endTracking, conversationData, createConversationRecord } = useConversationTracking();
   const [hasAudioPermission, setHasAudioPermission] = useState(false);
   
-  const agentId = language === 'ru' 
-    ? "doXNIsa8qmit1NjLQxgT"
-    : "cxRQ5scm1qhlOVdadUFp";
-
   const conversation = useConversation({
     onConnect: () => console.log('Connected to ElevenLabs'),
     onDisconnect: () => console.log('Disconnected from ElevenLabs'),
@@ -103,6 +104,10 @@ export function ElevenLabsWidget() {
 
   const isConnected = conversation.status === 'connected';
 
+  // Split the path for nested translations
+  const [section, subsection] = translationPath.split('.');
+  const getText = (key: string) => subsection ? t(section, subsection)[key] : t(section, key);
+
   return (
     <div className="w-[600px]">
       <div className={cn(
@@ -120,13 +125,13 @@ export function ElevenLabsWidget() {
 
           <div className="text-sm text-gray-600 h-[20px] flex items-center justify-center">
             {!hasAudioPermission ? (
-              t('widget', 'micPermission')
+              getText('micPermission')
             ) : !isConnected ? (
-              t('callToAction', 'button')
+              getText('button')
             ) : conversation.isSpeaking ? (
-              t('widget', 'speaking')
+              getText('speaking')
             ) : (
-              t('widget', 'listening')
+              getText('listening')
             )}
           </div>
 
@@ -143,18 +148,18 @@ export function ElevenLabsWidget() {
                 {isConnected ? (
                   <>
                     <PhoneOff className="w-4 h-4 mr-2" />
-                    {t('widget', 'endCall')}
+                    {getText('endCall')}
                   </>
                 ) : (
                   <>
                     <PhoneCall className="w-4 h-4 mr-2" />
-                    {t('widget', 'startCall')}
+                    {getText('startCall')}
                   </>
                 )}
               </Button>
             ) : (
               <div className="text-sm text-yellow-600 bg-yellow-50 p-3 rounded-lg text-center h-[44px] flex items-center justify-center">
-                {t('widget', 'micPermission')}
+                {getText('micPermission')}
               </div>
             )}
           </div>

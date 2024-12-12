@@ -101,14 +101,24 @@ export const translations = {
       callToAction: {
         title: "Ready to Transform Your Communication Skills?",
         description: "Join thousands of others who have already enhanced their interpersonal abilities through our AI-powered platform.",
-        button: "Get me onboard"
       },
       widget: {
         startCall: "Call me",
         endCall: "End",
         listening: "Listening",
         speaking: "Talk to interrupt",
-        micPermission: "Please allow microphone access"
+        micPermission: "Please allow microphone access",
+        button: "Get me onboard"
+      },
+      buddha: {
+        widget: {
+          startCall: "Talk to the Teacher",
+          button: "The Teacher will answer your questions about Buddha's teachings and the disciple's path",
+          endCall: "End",
+          listening: "Listening",
+          speaking: "Talk to interrupt",
+          micPermission: "Please allow microphone access"
+        }
       },
       // Add more sections as needed
     },
@@ -214,14 +224,24 @@ export const translations = {
       callToAction: {
         title: "Готовы Улучшить Свои Навыки Общения?",
         description: "Присоединяйтесь к тысячам тех, кто уже улучшил свои навыки межличностного общения с помощью нашей платформы на базе ИИ.",
-        button: "Я хочу начать"
       },
       widget: {
         startCall: "Позвони мне",
         endCall: "Завершить",
         listening: "Слушаю",
         speaking: "Говори, чтобы перебить",
-        micPermission: "Пожалуйста, разрешите доступ к микрофону"
+        micPermission: "Пожалуйста, разрешите доступ к микрофону",
+        button: "Я хочу начать"
+      },
+      buddha: {
+        widget: {
+          startCall: "Поговорить с учителем",
+          button: "Учитель ответит на ваши вопросы о учении Будды и пути ученика",
+          endCall: "Завершить",
+          listening: "Слушаю",
+          speaking: "Говори, чтобы перебить",
+          micPermission: "Пожалуйста, разрешите доступ к микрофону"
+        }
       },
       // Add more sections as needed
     }

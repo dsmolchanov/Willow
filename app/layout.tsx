@@ -20,19 +20,20 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isDashboard = pathname?.startsWith('/dashboard');
   const isHomePage = pathname === '/';
+  const isBuddhaPage = pathname === '/buddha';
 
   return (
     <div className={`${poppins.className} relative min-h-screen`}>
       <LanguageProvider>
         <WidgetProvider>
-          {!isDashboard && !isHomePage && (
+          {!isDashboard && !isHomePage && !isBuddhaPage && (
             <div className="fixed inset-0 z-0">
               <BackgroundGradientAnimation />
             </div>
           )}
           <div className="relative z-10 min-h-screen overflow-auto">
-            {!isDashboard && <NavBar />}
-            <main className={!isDashboard && !isHomePage ? "pt-20" : undefined}>
+            {!isDashboard && !isBuddhaPage && <NavBar />}
+            <main className={!isDashboard && !isHomePage && !isBuddhaPage ? "pt-20" : undefined}>
               {children}
             </main>
           </div>
