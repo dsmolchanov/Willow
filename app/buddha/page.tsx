@@ -1,39 +1,13 @@
-"use client";
+import { default as dynamicImport } from 'next/dynamic'
 
-import { ElevenLabsWidget } from "@/components/ElevenLabsWidget";
-import { useLanguage } from "@/context/LanguageContext";
-import { useEffect } from "react";
+const BuddhaPage = dynamicImport(() => import('@/components/BuddhaPage'), {
+  ssr: false,
+  loading: () => <div>Loading...</div>
+})
 
-const BuddhaPage = () => {
-  const { setLanguage } = useLanguage();
+export const dynamic = 'force-dynamic'
+export const runtime = 'edge'
 
-  useEffect(() => {
-    setLanguage('ru');
-  }, [setLanguage]);
-
-  return (
-    <div className="h-screen bg-black flex flex-col">
-      <div className="relative flex-1">
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="absolute inset-0 w-full h-full object-contain"
-        >
-          <source src="/video/avalokitesvara.mp4" type="video/mp4" />
-          Your browser does not support the video tag.
-        </video>
-      </div>
-      
-      <div className="flex justify-center p-8">
-        <ElevenLabsWidget 
-          agentId="76rHd9XeWPDuopdjONg6" 
-          translationPath="buddha.widget" 
-        />
-      </div>
-    </div>
-  );
-};
-
-export default BuddhaPage; 
+export default function Page() {
+  return <BuddhaPage />
+} 
