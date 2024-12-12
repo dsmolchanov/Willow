@@ -1,11 +1,14 @@
 "use client";
 
 import { ElevenLabsWidget } from "@/components/ElevenLabsWidget";
+import { SoundCloudPlayer } from "@/components/SoundCloudPlayer";
+import { useSoundCloud } from "@/context/SoundCloudContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { useEffect } from "react";
 
 export default function BuddhaPage() {
   const { setLanguage } = useLanguage();
+  const { currentTrack } = useSoundCloud();
 
   useEffect(() => {
     setLanguage('ru');
@@ -25,6 +28,12 @@ export default function BuddhaPage() {
           Your browser does not support the video tag.
         </video>
       </div>
+      
+      {currentTrack && (
+        <div className="absolute bottom-[200px] left-0 right-0 px-8">
+          <SoundCloudPlayer url={currentTrack} autoPlay={true} />
+        </div>
+      )}
       
       <div className="flex justify-center p-8">
         <ElevenLabsWidget 

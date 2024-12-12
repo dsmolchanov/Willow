@@ -3,21 +3,29 @@ const nextConfig = {
     reactStrictMode: true,
     swcMinify: true,
     experimental: {
-      esmExternals: 'loose',
-      appDir: true,
-      serverActions: true,
+      esmExternals: 'loose'
     },
     eslint: {
       ignoreDuringBuilds: true,
     },
     typescript: {
-        // WARNING: This allows production builds to successfully complete even if
-        // your project has type errors. Use this to temporarily bypass type checking.
-        // We recommend fixing type errors instead.
         ignoreBuildErrors: true,
     },
     async headers() {
       return [
+        {
+          source: '/api/elevenlabs/webhook',
+          headers: [
+            {
+              key: 'ELEVENLABS_WEBHOOK_SECRET',
+              value: process.env.ELEVENLABS_WEBHOOK_SECRET || '',
+            },
+            {
+              key: 'Content-Type',
+              value: 'application/json',
+            }
+          ],
+        },
         {
           source: '/:path*',
           headers: [
@@ -32,6 +40,10 @@ const nextConfig = {
     async rewrites() {
       return {
         beforeFiles: [
+          {
+            source: '/api/elevenlabs/webhook',
+            destination: '/api/elevenlabs/webhook',
+          },
           {
             source: '/:path*',
             has: [
@@ -53,6 +65,9 @@ const nextConfig = {
         topLevelAwait: true,
       }
       return config
+    },
+    images: {
+      domains: ['static.heygen.ai'],
     },
 };
   
