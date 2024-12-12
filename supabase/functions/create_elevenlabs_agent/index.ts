@@ -174,7 +174,7 @@ function constructConversationConfig(
           id: `criterion_${index + 1}`,
           name: c.name,
           type: "prompt",
-          conversation_goal_prompt: c.prompt.substring(0, 800)
+          conversation_goal_prompt: (c.prompt || "").substring(0, 800)
         }))
       }
     }

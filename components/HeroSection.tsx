@@ -4,7 +4,6 @@
 import React from "react";
 import { FlipWords } from "@/components/ui/flip-words";
 import { useLanguage } from "@/context/LanguageContext";
-import { ElevenLabsWidget } from "./ElevenLabsWidget";
 import { useWidget } from "@/context/WidgetContext";
 
 const HeroSection: React.FC = () => {
