@@ -1,4 +1,7 @@
 import { default as dynamicImport } from 'next/dynamic'
+import HeroSection from "@/components/HeroSection";
+import WhoNeedsThisSection from "@/components/WhoNeedsThisSection";
+import { Footer } from '@/components/Footer';
 
 const HomePage = dynamicImport(() => import('@/components/HomePage'), {
   ssr: false,

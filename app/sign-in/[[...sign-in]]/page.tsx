@@ -1,6 +1,6 @@
 "use client";
 
-import { SignIn } from "@clerk/nextjs";
+import { SignIn, useUser } from "@clerk/nextjs";
 import { BackgroundGradientAnimation } from "@/components/ui/background-gradient-animation";
 import { useSearchParams } from 'next/navigation';
 import { PostSigninHandler } from "@/components/PostSigninHandler";
@@ -8,6 +8,16 @@ import { PostSigninHandler } from "@/components/PostSigninHandler";
 export default function SignInPage() {
   const searchParams = useSearchParams();
   const reason = searchParams.get('reason');
+  const { isSignedIn } = useUser();
+
+  // Preserve parameters for sign-up URL
+  const currentParams = new URLSearchParams(Array.from(searchParams.entries()));
+  const signUpUrl = `/sign-up?${currentParams.toString()}`;
+
+  if (isSignedIn) {
+    window.location.href = "/dashboard";
+    return null;
+  }
 
   return (
     <BackgroundGradientAnimation containerClassName="min-h-screen">
@@ -47,7 +57,7 @@ export default function SignInPage() {
             routing="path"
             path="/sign-in"
             afterSignInUrl="/dashboard"
-            signUpUrl="/sign-up"
+            signUpUrl={signUpUrl}
           />
           <PostSigninHandler />
         </div>

@@ -10,6 +10,10 @@ export default function SignUpPage() {
   const { updateConversationWithUserId } = useConversationTracking();
   const reason = searchParams.get('reason');
 
+  // Preserve parameters for sign-in URL
+  const currentParams = new URLSearchParams(Array.from(searchParams.entries()));
+  const signInUrl = `/sign-in?${currentParams.toString()}`;
+
   return (
     <BackgroundGradientAnimation containerClassName="min-h-screen">
       <div className="w-full min-h-screen flex items-center justify-center">
@@ -48,7 +52,7 @@ export default function SignUpPage() {
             routing="path"
             path="/sign-up"
             afterSignUpUrl="/dashboard"
-            signUpUrl="/sign-up"
+            signInUrl={signInUrl}
           />
         </div>
       </div>

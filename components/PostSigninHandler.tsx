@@ -6,19 +6,44 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useConversationTracking } from '@/hooks/useConversationTracking';
 
 export function PostSigninHandler() {
-  const { user, isLoaded } = useUser();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { user, isLoaded } = useUser();
   const { createConversationRecord } = useConversationTracking();
 
   useEffect(() => {
     const createRecord = async () => {
       if (!isLoaded || !user) return;
 
-      const conversationId = searchParams.get('conversation');
-      const agentId = searchParams.get('agent');
-      const startTime = searchParams.get('start_time');
-      const endTime = searchParams.get('end_time');
+      // Try to get params from URL first
+      let conversationId = searchParams.get('conversation');
+      let agentId = searchParams.get('agent');
+      let startTime = searchParams.get('start_time');
+      let endTime = searchParams.get('end_time');
+
+      // If not in URL, try localStorage
+      if (!conversationId) {
+        try {
+          const storedParams = localStorage.getItem('willow_conversation_params');
+          if (storedParams) {
+            const params = JSON.parse(storedParams);
+            conversationId = params.conversation;
+            agentId = params.agent;
+            startTime = params.start_time;
+            endTime = params.end_time;
+            console.log('Retrieved params from localStorage:', params);
+          }
+        } catch (error) {
+          console.error('Error reading from localStorage:', error);
+        }
+      }
+
+      console.log('Final parameters:', {
+        conversationId,
+        agentId,
+        startTime,
+        endTime
+      });
 
       if (!conversationId || !agentId || !startTime || !endTime) {
         console.log('Missing required parameters:', {
@@ -47,6 +72,9 @@ export function PostSigninHandler() {
           endTime
         });
 
+        // Clear localStorage after successful use
+        localStorage.removeItem('willow_conversation_params');
+        
         router.push('/dashboard');
       } catch (error) {
         console.error('Failed to create conversation record:', error);

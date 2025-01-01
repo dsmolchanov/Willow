@@ -7,8 +7,10 @@ import dynamic from 'next/dynamic';
 import { ElevenLabsWidget } from "@/components/ElevenLabsWidget";
 import { BackgroundGradientAnimation } from "@/components/ui/background-gradient-animation";
 import { useLanguage } from '@/context/LanguageContext';
+import Footer from "@/components/Footer";
 
 const HeroSection = dynamic(() => import("@/components/HeroSection"), { ssr: false });
+const WhoNeedsThisSection = dynamic(() => import("@/components/WhoNeedsThisSection"), { ssr: false });
 const BenefitsSection = dynamic(() => import("@/components/BenefitsSection"), { ssr: false });
 const HowItWorksSection = dynamic(() => import("@/components/HowItWorksSection"), { ssr: false });
 const CallToActionSection = dynamic(() => import("@/components/CallToActionSection"), { ssr: false });
@@ -42,11 +44,15 @@ export default function HomePage() {
         </BackgroundGradientAnimation>
       </div>
       
+      <WhoNeedsThisSection />
+      
       <div className="bg-white">
         <BenefitsSection />
         <HowItWorksSection />
         <CallToActionSection />
       </div>
+
+      <Footer />
 
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
         <ElevenLabsWidget agentId={agentId} />

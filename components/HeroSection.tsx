@@ -10,6 +10,7 @@ const HeroSection: React.FC = () => {
   const { t } = useLanguage();
   const { isHeroWidgetVisible } = useWidget();
   const tools = t('hero', 'tools') as unknown as string[];
+  const stats = t('hero', 'stats') as any;
 
   return (
     <section className="flex flex-col items-center justify-center w-full h-full">
@@ -25,6 +26,22 @@ const HeroSection: React.FC = () => {
             duration={3000} 
           />
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mt-16 max-w-7xl mx-auto px-4">
+        {(['skills', 'practice', 'training', 'stages'] as const).map((stat) => (
+          <div key={stat} className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 text-center hover:bg-white/15 transition-all border-2 border-white/20">
+            <div className="text-4xl font-bold text-white mb-2">
+              {stats[stat].number}
+            </div>
+            <div className="text-xl font-semibold text-white mb-2">
+              {stats[stat].title}
+            </div>
+            <p className="text-white/80 text-sm">
+              {stats[stat].description}
+            </p>
+          </div>
+        ))}
       </div>
     </section>
   );

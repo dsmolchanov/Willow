@@ -16,7 +16,58 @@ export function PostSignupHandler() {
   const { createConversationRecord } = useConversationTracking();
   const supabase = createClientComponentClient();
 
+  // Debug logs
+  console.log('All search params:', Object.fromEntries(searchParams.entries()));
+  
+  // Check the actual parameter names
+  console.log('Parameters received:', {
+    conversation: searchParams.get('conversation'),
+    agent: searchParams.get('agent'),
+    start_time: searchParams.get('start_time'),
+    end_time: searchParams.get('end_time')
+  });
+
   useEffect(() => {
+    // Try to get params from URL first
+    let conversationId = searchParams.get('conversation');
+    let agentId = searchParams.get('agent');
+    let startTime = searchParams.get('start_time');
+    let endTime = searchParams.get('end_time');
+
+    // If not in URL, try localStorage
+    if (!conversationId) {
+      try {
+        const storedParams = localStorage.getItem('willow_conversation_params');
+        if (storedParams) {
+          const params = JSON.parse(storedParams);
+          conversationId = params.conversation;
+          agentId = params.agent;
+          startTime = params.start_time;
+          endTime = params.end_time;
+          console.log('Retrieved params from localStorage:', params);
+        }
+      } catch (error) {
+        console.error('Error reading from localStorage:', error);
+      }
+    }
+
+    console.log('Final parameters:', {
+      conversationId,
+      agentId,
+      startTime,
+      endTime
+    });
+
+    if (!conversationId || !agentId || !startTime || !endTime) {
+      console.log('Missing required parameters:', {
+        conversationId,
+        agentId,
+        startTime,
+        endTime
+      });
+      return;
+    }
+
     const waitForUser = async (clerkId: string, retryCount = 0): Promise<boolean> => {
       const { data: existingUser, error } = await supabase
         .from('users')
@@ -40,22 +91,6 @@ export function PostSignupHandler() {
 
     const createRecord = async () => {
       if (!isLoaded || !user) return;
-
-      const conversationId = searchParams.get('conversation');
-      const agentId = searchParams.get('agent');
-      const startTime = searchParams.get('start_time');
-      const endTime = searchParams.get('end_time');
-
-      if (!conversationId || !agentId || !startTime || !endTime) {
-        console.log('Missing required parameters:', {
-          conversationId,
-          agentId,
-          startTime,
-          endTime
-        });
-        router.push('/dashboard');
-        return;
-      }
 
       try {
         // Wait for user record to be created by webhook

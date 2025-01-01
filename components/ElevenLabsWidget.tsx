@@ -22,13 +22,74 @@ export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: Eleven
   const { language, t } = useLanguage();
   const { startTracking, endTracking, conversationData, createConversationRecord } = useConversationTracking();
   const [hasAudioPermission, setHasAudioPermission] = useState(false);
+  const [isHandlingStop, setIsHandlingStop] = useState(false);
   
   const conversation = useConversation({
-    onConnect: () => console.log('Connected to ElevenLabs'),
-    onDisconnect: () => console.log('Disconnected from ElevenLabs'),
+    onConnect: () => {
+      console.log('Connected to ElevenLabs');
+    },
+    onDisconnect: async () => {
+      console.log('Disconnected from ElevenLabs');
+      console.log('Current conversation data:', conversationData); // Debug current data
+      
+      try {
+        const endTime = new Date().toISOString();
+        endTracking(endTime);
+        
+        // Wait for endTracking to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        if (conversationData) {
+          // Store conversation data in localStorage
+          const conversationParams = {
+            conversation: conversationData.elevenLabsConversationId,
+            agent: conversationData.agentId,
+            start_time: conversationData.startTime,
+            end_time: endTime
+          };
+          
+          // Debug localStorage operations
+          console.log('Attempting to store params:', conversationParams);
+          localStorage.setItem('willow_conversation_params', JSON.stringify(conversationParams));
+          
+          // Verify storage
+          const storedData = localStorage.getItem('willow_conversation_params');
+          console.log('Verified stored data:', storedData);
+
+          // Create URL parameters
+          const params = new URLSearchParams();
+          Object.entries(conversationParams).forEach(([key, value]) => {
+            params.set(key, value);
+          });
+          params.set('reason', 'evaluation');
+          
+          const finalUrl = `/sign-up?${params.toString()}`;
+          console.log('Final redirect URL:', finalUrl);
+          
+          // Use a small delay before redirect to ensure storage is complete
+          await new Promise(resolve => setTimeout(resolve, 100));
+          window.location.replace(finalUrl);
+        } else {
+          console.warn('No conversation data available for redirect');
+          window.location.replace('/sign-up');
+        }
+      } catch (error) {
+        console.error('Error in onDisconnect:', error);
+        console.error('Error details:', error.message);
+        console.error('Error stack:', error.stack);
+        window.location.replace('/sign-up');
+      }
+    },
     onMessage: (message) => console.log('Message:', message),
     onError: (error) => console.error('Error:', error),
   });
+
+  // Add a cleanup function to handle component unmounting
+  useEffect(() => {
+    return () => {
+      console.log('ElevenLabsWidget unmounting, conversation data:', conversationData);
+    };
+  }, [conversationData]);
 
   const handleStart = useCallback(async () => {
     try {
@@ -49,6 +110,10 @@ export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: Eleven
   }, [conversation, agentId, startTracking]);
 
   const handleStop = useCallback(async () => {
+    // Prevent multiple executions
+    if (isHandlingStop) return;
+    setIsHandlingStop(true);
+
     const endTime = new Date().toISOString();
     
     try {
@@ -60,8 +125,8 @@ export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: Eleven
       
       // Handle navigation
       if (isSignedIn && user) {
-        // If user is signed in, we should handle the database operation here
         if (conversationData) {
+          console.log('Creating conversation record...');
           await createConversationRecord(user.id, {
             ...conversationData,
             endTime
@@ -69,7 +134,6 @@ export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: Eleven
         }
         router.push('/dashboard');
       } else if (conversationData) {
-        // If not signed in, pass data through URL
         const params = new URLSearchParams({
           reason: 'evaluation',
           conversation: conversationData.elevenLabsConversationId,
@@ -88,8 +152,11 @@ export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: Eleven
       }
     } catch (error) {
       console.error('Failed to stop conversation:', error);
+      router.push('/sign-up');
+    } finally {
+      setIsHandlingStop(false);
     }
-  }, [conversation, isSignedIn, router, conversationData, endTracking, user, createConversationRecord]);
+  }, [conversation, isSignedIn, router, conversationData, endTracking, user, createConversationRecord, isHandlingStop]);
 
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ audio: true })
