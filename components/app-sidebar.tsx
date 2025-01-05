@@ -24,7 +24,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 const items = [
   {
     title: "Skills",
-    url: "/dashboard",
+    url: "/dashboard/skills",
     icon: GraduationCap,
   },
   {
@@ -34,7 +34,7 @@ const items = [
   },
   {
     title: "Tasks",
-    url: "/dashboard/courses",
+    url: "/dashboard/tasks",
     icon: CheckSquare,
   },
   {

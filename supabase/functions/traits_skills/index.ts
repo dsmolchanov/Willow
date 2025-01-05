@@ -366,36 +366,71 @@ async function loadTraitMappings() {
     return data
 }
 
-async function loadUserTraits(clerkId: string) {
-    const { data, error } = await supabase
+async function loadUserTraits(clerkId: string, elevenlabsConversationId?: string) {
+    console.log('Loading traits for clerk_id:', clerkId, 'elevenlabs_conversation_id:', elevenlabsConversationId);
+    
+    // First try to get user traits
+    const { data: traitsData, error: traitsError } = await supabase
         .from('user_traits')
         .select('*')
         .eq('clerk_id', clerkId)
-        .maybeSingle();
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-    if (error) throw error;
+    if (traitsError) {
+        console.error('Error fetching user_traits:', traitsError);
+        throw traitsError;
+    }
     
-    if (!data) {
-        // If user_traits not found, try user_conversations (assuming you have elevenlabs_conversation_id defined)
-        // If you don't have elevenlabs_conversation_id here, you should remove or define it.
-        const elevenlabs_conversation_id = 'some_conversation_id' // Placeholder
+    console.log('Traits data:', traitsData);
+    
+    // If we found traits data, return the first record
+    if (traitsData && traitsData.length > 0) {
+        return traitsData[0];
+    }
+
+    // If no traits found and we have elevenlabs_conversation_id, try that specific conversation
+    if (elevenlabsConversationId) {
+        console.log('Fetching specific conversation:', elevenlabsConversationId);
+        
+        // First check if the conversation exists
+        const { data: convCheck, error: checkError } = await supabase
+            .from('user_conversations')
+            .select('id')
+            .eq('clerk_id', clerkId)
+            .eq('elevenlabs_conversation_id', elevenlabsConversationId);
+            
+        if (checkError) {
+            console.error('Error checking conversation:', checkError);
+            throw checkError;
+        }
+        
+        console.log('Conversation check result:', convCheck);
+        
+        if (!convCheck || convCheck.length === 0) {
+            throw new Error(`No conversation found with ID ${elevenlabsConversationId}`);
+        }
+
         const { data: convData, error: convError } = await supabase
             .from('user_conversations')
             .select('data_collection_results')
             .eq('clerk_id', clerkId)
-            .eq('elevenlabs_conversation_id', elevenlabs_conversation_id)
-            .single();
+            .eq('elevenlabs_conversation_id', elevenlabsConversationId)
+            .maybeSingle();
 
-        if (convError) throw convError;
-        
+        if (convError) {
+            console.error('Error fetching specific conversation:', convError);
+            throw convError;
+        }
+
+        console.log('Conversation data:', convData);
+
         if (!convData || !convData.data_collection_results) {
-            throw new Error('No trait data found for user');
+            throw new Error('No trait data found in the specified conversation');
         }
 
         return convData.data_collection_results;
     }
-
-    return data;
 }
 
 // Update handleInitialCalculation to handle async learning path generation

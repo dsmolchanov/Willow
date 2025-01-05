@@ -90,75 +90,118 @@ async function callOpenAI(prompt: string): Promise<any> {
 }
 
 async function fetchUserTraits(clerk_id: string) {
+  // First, let's get the most recent trait record for this user
   const { data, error } = await supabase
     .from('user_traits')
-    .select('life_context, stakes_level, growth_motivation, confidence_pattern, interaction_style')
+    .select('life_context, stakes_level, growth_motivation, confidence_pattern, interaction_style, created_at')
     .eq('clerk_id', clerk_id)
-    .single();
+    .order('created_at', { ascending: false })  // Order by creation time, newest first
+    .limit(1);  // Take only the most recent record
 
-  if (error) throw new Error(`Error fetching user traits: ${error.message}`);
-  if (!data) return "No specific trait patterns found.";
+  // Handle any database errors gracefully
+  if (error) {
+    console.error('Error fetching user traits:', error);
+    console.error('Details:', {
+      clerk_id,
+      errorCode: error.code,
+      errorMessage: error.message,
+      timestamp: new Date().toISOString()
+    });
+    return "No specific trait patterns found.";
+  }
 
+  // If no data was found, handle that case gracefully
+  if (!data || data.length === 0) {
+    console.log(`No traits found for user ${clerk_id} at ${new Date().toISOString()}`);
+    return "No specific trait patterns found.";
+  }
+
+  // We'll work with the most recent record (data[0])
+  const mostRecentTraits = data[0];
+
+  // Helper function to safely extract patterns from JSON fields
   function extractPattern(traitJSON: any): string {
-    if (!traitJSON || !traitJSON.value) return "";
-    const patternMatch = traitJSON.value.match(/PATTERN:\s*([^|]+)/);
-    return patternMatch ? patternMatch[1].trim() : "";
-  }
-
-  let lifeContextSummary = "";
-  let stakesSummary = "";
-  let growthSummary = "";
-  let confidenceSummary = "";
-  let interactionStyleSummary = "";
-
-  if (data.life_context) {
-    const pattern = extractPattern(data.life_context);
-    if (pattern) lifeContextSummary = `Life Context: ${pattern}`;
-  }
-
-  if (data.stakes_level) {
-    const pattern = extractPattern(data.stakes_level);
-    if (pattern) {
-      const [primaryImpact, secondaryImpact] = pattern.split(':').map(s => s.trim());
-      stakesSummary = `Stakes: ${primaryImpact.replace('_', ' ')} and ${secondaryImpact.replace('_', ' ')}`;
+    try {
+      if (!traitJSON || !traitJSON.value) {
+        return "";
+      }
+      const patternMatch = traitJSON.value.match(/PATTERN:\s*([^|]+)/);
+      return patternMatch ? patternMatch[1].trim() : "";
+    } catch (e) {
+      console.error('Error extracting pattern:', e);
+      return "";
     }
   }
 
-  if (data.growth_motivation) {
-    const pattern = extractPattern(data.growth_motivation);
-    if (pattern) {
-      const [mainDriver, supportingDriver] = pattern.split(':').map(s => s.trim());
-      growthSummary = `Growth Motivation: ${mainDriver.replace('_', ' ')} and ${supportingDriver.replace('_', ' ')}`;
+  // Build the trait summaries with detailed error handling
+  let traitSummaries = {
+    lifeContext: "",
+    stakes: "",
+    growth: "",
+    confidence: "",
+    interactionStyle: ""
+  };
+
+  try {
+    // Life Context
+    if (mostRecentTraits.life_context) {
+      const pattern = extractPattern(mostRecentTraits.life_context);
+      if (pattern) {
+        traitSummaries.lifeContext = `Life Context: ${pattern}`;
+      }
     }
-  }
 
-  if (data.confidence_pattern) {
-    const pattern = extractPattern(data.confidence_pattern);
-    if (pattern) {
-      const [currentState, desiredState] = pattern.split('>').map(s => s.trim());
-      confidenceSummary = `Confidence Pattern: moving from ${currentState} to ${desiredState}`;
+    // Stakes Level
+    if (mostRecentTraits.stakes_level) {
+      const pattern = extractPattern(mostRecentTraits.stakes_level);
+      if (pattern) {
+        const [primaryImpact, secondaryImpact] = pattern.split(':').map(s => s.trim());
+        traitSummaries.stakes = `Stakes: ${primaryImpact.replace('_', ' ')} and ${secondaryImpact.replace('_', ' ')}`;
+      }
     }
-  }
 
-  if (data.interaction_style) {
-    const pattern = extractPattern(data.interaction_style);
-    if (pattern) {
-      const [calmState, triggeredState] = pattern.split('->').map(s => s.trim());
-      interactionStyleSummary = `Interaction Style: shifts from ${calmState} to ${triggeredState} under pressure`;
+    // Growth Motivation
+    if (mostRecentTraits.growth_motivation) {
+      const pattern = extractPattern(mostRecentTraits.growth_motivation);
+      if (pattern) {
+        const [mainDriver, supportingDriver] = pattern.split(':').map(s => s.trim());
+        traitSummaries.growth = `Growth Motivation: ${mainDriver.replace('_', ' ')} and ${supportingDriver.replace('_', ' ')}`;
+      }
     }
+
+    // Confidence Pattern
+    if (mostRecentTraits.confidence_pattern) {
+      const pattern = extractPattern(mostRecentTraits.confidence_pattern);
+      if (pattern) {
+        const [currentState, desiredState] = pattern.split('>').map(s => s.trim());
+        traitSummaries.confidence = `Confidence Pattern: moving from ${currentState} to ${desiredState}`;
+      }
+    }
+
+    // Interaction Style
+    if (mostRecentTraits.interaction_style) {
+      const pattern = extractPattern(mostRecentTraits.interaction_style);
+      if (pattern) {
+        const [calmState, triggeredState] = pattern.split('->').map(s => s.trim());
+        traitSummaries.interactionStyle = `Interaction Style: shifts from ${calmState} to ${triggeredState} under pressure`;
+      }
+    }
+
+    // Combine all valid trait summaries
+    const validTraits = Object.values(traitSummaries).filter(Boolean);
+
+    if (validTraits.length > 0) {
+      return `The user has the following relevant traits:\n${validTraits.join("\n")}`;
+    } else {
+      console.log(`No valid patterns found in traits for user ${clerk_id} at ${new Date().toISOString()}`);
+      return "No specific trait patterns found.";
+    }
+
+  } catch (e) {
+    console.error('Error processing user traits:', e);
+    console.error('Trait data that caused error:', mostRecentTraits);
+    return "No specific trait patterns found.";
   }
-
-  const userContextTraits = [
-    lifeContextSummary,
-    stakesSummary,
-    growthSummary,
-    confidenceSummary,
-    interactionStyleSummary
-  ].filter(Boolean).join("\n");
-
-  return userContextTraits
-    ? `The user has the following relevant traits:\n${userContextTraits}`
-    : "No specific trait patterns found.";
 }
 
 async function generateScenarioPrompt(clerk_id: string, language: string, skillsSummary: string): Promise<string> {

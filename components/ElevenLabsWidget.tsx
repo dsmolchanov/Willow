@@ -24,60 +24,81 @@ export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: Eleven
   const [hasAudioPermission, setHasAudioPermission] = useState(false);
   const [isHandlingStop, setIsHandlingStop] = useState(false);
   
+  const storeConversationAndRedirect = useCallback(async (endTime: string) => {
+    if (conversationData) {
+      try {
+        // Store complete conversation data in localStorage
+        const pendingConversations = JSON.parse(localStorage.getItem('willow_pending_conversations') || '[]');
+        
+        const conversationRecord = {
+          id: conversationData.elevenLabsConversationId,
+          agentId: conversationData.agentId,
+          startTime: conversationData.startTime,
+          endTime: endTime,
+          storedAt: new Date().toISOString(),
+          status: 'pending'
+        };
+        
+        // Add to pending conversations array
+        pendingConversations.push(conversationRecord);
+        
+        // Store updated array
+        localStorage.setItem('willow_pending_conversations', JSON.stringify(pendingConversations));
+        
+        // Also store in willow_conversation_params for compatibility
+        const conversationParams = {
+          conversation: conversationData.elevenLabsConversationId,
+          agent: conversationData.agentId,
+          start_time: conversationData.startTime,
+          end_time: endTime
+        };
+        localStorage.setItem('willow_conversation_params', JSON.stringify(conversationParams));
+        
+        console.log('Stored conversation data:', conversationParams);
+        
+        // Create the URL with properly encoded parameters
+        const searchParams = new URLSearchParams();
+        Object.entries(conversationParams).forEach(([key, value]) => {
+          if (value) searchParams.append(key, value);
+        });
+        
+        const url = `/sign-in?${searchParams.toString()}`;
+        console.log('Redirecting to:', url);
+        
+        // Use router.push for client-side navigation
+        router.push(url);
+      } catch (error) {
+        console.error('Failed to store conversation:', error);
+        router.push('/sign-in');
+      }
+    } else {
+      console.warn('No conversation data available');
+      router.push('/sign-in');
+    }
+  }, [conversationData, router]);
+
   const conversation = useConversation({
     onConnect: () => {
       console.log('Connected to ElevenLabs');
     },
     onDisconnect: async () => {
       console.log('Disconnected from ElevenLabs');
-      console.log('Current conversation data:', conversationData); // Debug current data
       
       try {
         const endTime = new Date().toISOString();
         endTracking(endTime);
         
-        // Wait for endTracking to complete
+        // Wait for state update
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        if (conversationData) {
-          // Store conversation data in localStorage
-          const conversationParams = {
-            conversation: conversationData.elevenLabsConversationId,
-            agent: conversationData.agentId,
-            start_time: conversationData.startTime,
-            end_time: endTime
-          };
-          
-          // Debug localStorage operations
-          console.log('Attempting to store params:', conversationParams);
-          localStorage.setItem('willow_conversation_params', JSON.stringify(conversationParams));
-          
-          // Verify storage
-          const storedData = localStorage.getItem('willow_conversation_params');
-          console.log('Verified stored data:', storedData);
-
-          // Create URL parameters
-          const params = new URLSearchParams();
-          Object.entries(conversationParams).forEach(([key, value]) => {
-            params.set(key, value);
-          });
-          params.set('reason', 'evaluation');
-          
-          const finalUrl = `/sign-up?${params.toString()}`;
-          console.log('Final redirect URL:', finalUrl);
-          
-          // Use a small delay before redirect to ensure storage is complete
-          await new Promise(resolve => setTimeout(resolve, 100));
-          window.location.replace(finalUrl);
-        } else {
-          console.warn('No conversation data available for redirect');
-          window.location.replace('/sign-up');
+        if (!isSignedIn) {
+          await storeConversationAndRedirect(endTime);
         }
       } catch (error) {
         console.error('Error in onDisconnect:', error);
-        console.error('Error details:', error.message);
-        console.error('Error stack:', error.stack);
-        window.location.replace('/sign-up');
+        if (!isSignedIn) {
+          await storeConversationAndRedirect(new Date().toISOString());
+        }
       }
     },
     onMessage: (message) => console.log('Message:', message),
@@ -114,49 +135,45 @@ export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: Eleven
     if (isHandlingStop) return;
     setIsHandlingStop(true);
 
-    const endTime = new Date().toISOString();
-    
     try {
+      const endTime = new Date().toISOString();
+      
       // End ElevenLabs session
       await conversation.endSession();
       
       // Update memory storage with end time
       endTracking(endTime);
       
-      // Handle navigation
+      // Wait for state update
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       if (isSignedIn && user) {
         if (conversationData) {
-          console.log('Creating conversation record...');
-          await createConversationRecord(user.id, {
-            ...conversationData,
-            endTime
-          });
+          try {
+            await createConversationRecord(user.id, {
+              ...conversationData,
+              endTime
+            });
+            router.push('/dashboard');
+          } catch (error) {
+            console.error('Failed to store conversation:', error);
+            router.push('/dashboard');
+          }
+        } else {
+          router.push('/dashboard');
         }
-        router.push('/dashboard');
-      } else if (conversationData) {
-        const params = new URLSearchParams({
-          reason: 'evaluation',
-          conversation: conversationData.elevenLabsConversationId,
-          agent: conversationData.agentId,
-          start_time: conversationData.startTime,
-          end_time: endTime,
-          redirect_url: `/sign-in?${new URLSearchParams({
-            conversation: conversationData.elevenLabsConversationId,
-            agent: conversationData.agentId,
-            start_time: conversationData.startTime,
-            end_time: endTime
-          })}`
-        });
-        
-        router.push(`/sign-up?${params}`);
+      } else {
+        await storeConversationAndRedirect(endTime);
       }
     } catch (error) {
       console.error('Failed to stop conversation:', error);
-      router.push('/sign-up');
+      if (!isSignedIn) {
+        await storeConversationAndRedirect(new Date().toISOString());
+      }
     } finally {
       setIsHandlingStop(false);
     }
-  }, [conversation, isSignedIn, router, conversationData, endTracking, user, createConversationRecord, isHandlingStop]);
+  }, [conversation, isSignedIn, router, conversationData, endTracking, user, createConversationRecord, isHandlingStop, storeConversationAndRedirect]);
 
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ audio: true })
