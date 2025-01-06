@@ -22,19 +22,20 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const isDashboard = pathname?.startsWith('/dashboard');
   const isHomePage = pathname === '/';
   const isBuddhaPage = pathname === '/buddha';
+  const isCookingPage = pathname === '/cooking';
 
   return (
     <div className={`${poppins.className} relative min-h-screen`}>
       <LanguageProvider>
         <WidgetProvider>
-          {!isDashboard && !isHomePage && !isBuddhaPage && (
+          {!isDashboard && !isHomePage && !isBuddhaPage && !isCookingPage && (
             <div className="fixed inset-0 z-0">
               <BackgroundGradientAnimation />
             </div>
           )}
           <div className="relative z-10 min-h-screen overflow-auto">
-            {!isDashboard && !isBuddhaPage && <NavBar />}
-            <main className={!isDashboard && !isHomePage && !isBuddhaPage ? "pt-20" : undefined}>
+            {!isDashboard && !isBuddhaPage && !isCookingPage && <NavBar />}
+            <main className={!isDashboard && !isHomePage && !isBuddhaPage && !isCookingPage ? "pt-20" : undefined}>
               {children}
             </main>
           </div>

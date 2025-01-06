@@ -9,8 +9,8 @@ import {
   CarouselItem,
   CarouselNext,
   CarouselPrevious,
+  type CarouselApi,
 } from "@/components/ui/carousel"
-import { type CarouselApi } from 'embla-carousel-react'
 
 const images = [
   '/images/Oliver/Oliver_Dzh_-_Vybor_Dzheymi_Mirovaya_Kukhnya_-_dzheymi_I_Druzya_-_2016_Page_01_Image_0001.jpg',
@@ -46,12 +46,21 @@ const images = [
 
 export default function CookingPage() {
   const [api, setApi] = useState<CarouselApi>()
-  const [isLoading, setIsLoading] = useState(true)
+  const [current, setCurrent] = useState(0)
 
   useEffect(() => {
-    // Set loading to false once component is mounted
-    setIsLoading(false)
-  }, [])
+    if (!api) return
+
+    api.on("select", () => {
+      setCurrent(api.selectedScrollSnap())
+    })
+
+    return () => {
+      api.off("select", () => {
+        setCurrent(api.selectedScrollSnap())
+      })
+    }
+  }, [api])
 
   useEffect(() => {
     if (!api) return
@@ -62,14 +71,6 @@ export default function CookingPage() {
 
     return () => clearInterval(interval)
   }, [api])
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
-        <div className="text-white">Loading...</div>
-      </div>
-    )
-  }
 
   return (
     <div className="flex flex-col items-center justify-between min-h-screen bg-black">
@@ -91,6 +92,7 @@ export default function CookingPage() {
                   fill
                   className="object-contain"
                   priority={index === 0}
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                 />
               </CarouselItem>
             ))}
