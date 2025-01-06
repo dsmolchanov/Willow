@@ -14,7 +14,7 @@ interface Task {
   status: string;
 }
 
-export function TasksContent() {
+export default function TasksPage() {
   const supabase = createClientComponentClient();
   const { user } = useUser();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -98,5 +98,3 @@ export function TasksContent() {
     </div>
   );
 }
-
-export default TasksContent; 
