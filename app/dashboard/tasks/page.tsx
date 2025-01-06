@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from "react";
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -50,7 +51,7 @@ function getDuration(start: string, end: string | null): string {
   return `${(duration / 60).toFixed(2)} min`;
 }
 
-export default function TasksPage() {
+function TasksPageContent() {
   const { user } = useUser();
   const [scenarios, setScenarios] = useState<UserScenario[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -248,5 +249,17 @@ export default function TasksPage() {
         </SheetContent>
       </Sheet>
     </div>
+  );
+}
+
+export default function TasksPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse">Loading tasks...</div>
+      </div>
+    }>
+      <TasksPageContent />
+    </Suspense>
   );
 } 

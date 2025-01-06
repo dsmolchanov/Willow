@@ -13,9 +13,8 @@ const CookingComponent = dynamicImport(
   }
 )
 
-// Force dynamic rendering and edge runtime
+// Force dynamic rendering only
 export const dynamic = 'force-dynamic'
-export const runtime = 'edge'
 
 export default function CookingPage() {
   return (
