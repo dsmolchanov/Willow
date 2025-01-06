@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useUser } from "@clerk/nextjs";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { PlayCircle, Clock, X, Target } from 'lucide-react';
@@ -20,6 +20,9 @@ interface UserScenario {
   skill_objectives: any;
   practice_metrics: any;
   growth_indicators: any;
+  scenarios?: {
+    title: string;
+  };
 }
 
 function formatTime(date: string) {
@@ -51,6 +54,18 @@ function getDuration(start: string, end: string | null): string {
 }
 
 export default function TasksPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse">Loading tasks...</div>
+      </div>
+    }>
+      <TasksContent />
+    </Suspense>
+  );
+}
+
+function TasksContent() {
   const { user } = useUser();
   const [scenarios, setScenarios] = useState<UserScenario[]>([]);
   const [isLoading, setIsLoading] = useState(true);
