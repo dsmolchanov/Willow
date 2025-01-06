@@ -1,21 +1,17 @@
-import { dynamicImport } from '@/lib/dynamic-import'
+import { default as dynamicImport } from 'next/dynamic'
 
-const CookingComponent = dynamicImport(
-  () => import('@/components/CookingPage'),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse">Loading cooking page...</div>
-      </div>
-    ),
-  }
-)
+const CookingPage = dynamicImport(() => import('@/components/CookingPage'), {
+  ssr: false,
+  loading: () => (
+    <div className="min-h-screen flex items-center justify-center bg-black">
+      <div className="text-white">Loading...</div>
+    </div>
+  )
+})
 
-// Force dynamic rendering and edge runtime
 export const dynamic = 'force-dynamic'
 export const runtime = 'edge'
 
-export default function CookingPage() {
-  return <CookingComponent />
+export default function Page() {
+  return <CookingPage />
 } 
