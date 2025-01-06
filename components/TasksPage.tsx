@@ -4,7 +4,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { toast } from 'sonner';
 
 interface Task {
@@ -14,7 +14,7 @@ interface Task {
   status: string;
 }
 
-export default function TasksPage() {
+function TasksContent() {
   const supabase = createClientComponentClient();
   const { user } = useUser();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -96,5 +96,17 @@ export default function TasksPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function TasksPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse">Loading tasks...</div>
+      </div>
+    }>
+      <TasksContent />
+    </Suspense>
   );
 } 
