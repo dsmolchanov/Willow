@@ -13,7 +13,7 @@ const TasksComponent = dynamic(() => import('@/components/TasksPage'), {
 });
 
 // Force dynamic rendering and edge runtime
-export const dynamic = 'force-dynamic';
+export const dynamicConfig = 'force-dynamic';
 export const runtime = 'edge';
 
 export default function TasksPage() {
