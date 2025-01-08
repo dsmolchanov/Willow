@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react'
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
-import { DashboardRightRail } from "@/components/DashboardRightRail"
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useUser } from "@clerk/nextjs"
 
@@ -101,10 +100,6 @@ export default function DashboardLayout({
               ? React.cloneElement(children, childProps)
               : children}
           </div>
-          <DashboardRightRail 
-            focusedSkills={focusedSkills}
-            onRemoveSkill={handleRemoveSkill}
-          />
         </main>
       </SidebarProvider>
     </div>

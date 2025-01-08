@@ -92,6 +92,31 @@ export default function SkillsPage() {
         }
 
         setLearningPathData(pathData);
+
+        // Initialize focused skills with top 5 by score
+        if (pathData?.prioritized_skills && pathData?.learning_path) {
+          const topPrioritizedSkills = pathData.prioritized_skills
+            .sort((a: any, b: any) => b.priority_score - a.priority_score)
+            .slice(0, 5);
+
+          const topSkills = topPrioritizedSkills
+            .map((prioritySkill: any) => {
+              const learningPathSkill = pathData.learning_path.find(
+                (lp: any) => lp.skill_id === prioritySkill.skill_id
+              );
+              
+              if (!learningPathSkill) return null;
+
+              return {
+                skill_id: prioritySkill.skill_id,
+                name: learningPathSkill.learning_activities?.[0]?.replace('General activity for ', '') || 'Unnamed Skill',
+                priority_level: learningPathSkill.priority_level || 'medium'
+              };
+            })
+            .filter(Boolean);
+
+          setFocusedSkills(topSkills);
+        }
       } catch (err) {
         console.error('Error in loadLearningPathData:', err);
         setError('An unexpected error occurred while loading your skills data.');
@@ -201,8 +226,8 @@ export default function SkillsPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-background flex">
-        <div className="flex-1">
+      <div className="flex">
+        <div className="flex-1 overflow-y-auto pr-4 max-h-[calc(100vh-2rem)]">
           <SkillRoadmap 
             learningPath={learningPathData.learning_path}
             prioritizedSkills={learningPathData.prioritized_skills}
@@ -211,12 +236,16 @@ export default function SkillsPage() {
           />
         </div>
         
-        <DashboardRightRail 
-          focusedSkills={focusedSkills}
-          onRemoveSkill={(skillId) => handleToggleFocusSkill(skillId, '', '')}
-          onStartSession={handleStartSession}
-          isLoading={isLoading || isGeneratingScenario}
-        />
+        <div className="w-80 flex-shrink-0">
+          <div className="fixed w-80">
+            <DashboardRightRail 
+              focusedSkills={focusedSkills}
+              onRemoveSkill={(skillId) => handleToggleFocusSkill(skillId, '', '')}
+              onStartSession={handleStartSession}
+              isLoading={isGeneratingScenario}
+            />
+          </div>
+        </div>
       </div>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
