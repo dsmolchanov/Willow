@@ -1,117 +1,143 @@
-// useConversationTracking.ts
-"use client";
-
 import { useCallback, useState } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useUser } from '@clerk/nextjs';
+import type { Message } from '@/types';
 
-const CALL_STATUS = {
-  UNKNOWN: 'unknown',
-  SUCCESS: 'success',
-  FAILURE: 'failure'
-} as const;
+// Define the enum to match the database
+type CallStatus = 'success' | 'failure' | 'unknown' | 'processed';
 
-type CallStatus = typeof CALL_STATUS[keyof typeof CALL_STATUS];
-
-interface ConversationData {
+interface PendingConversation {
   elevenLabsConversationId: string;
   agentId: string;
   startTime: string;
+  scenarioInfo: {
+    scenario_id: number;
+    title: string;
+    skill_ids: number[];
+  };
+  transcript?: Message[];
+  analysis?: any;
   endTime?: string;
+  success?: boolean;
 }
 
 export function useConversationTracking() {
-  const [conversationData, setConversationData] = useState<ConversationData | null>(null);
   const supabase = createClientComponentClient();
+  const { user } = useUser();
+  const [pendingConversation, setPendingConversation] = useState<PendingConversation | null>(null);
 
-  const startTracking = useCallback((data: ConversationData) => {
-    console.log('Starting conversation tracking:', {
-      ...data,
-      type: 'memory-only'
-    });
-    setConversationData(data);
-  }, []);
-
-  const endTracking = useCallback((endTime: string) => {
-    setConversationData(prev => {
-      if (!prev) return null;
-      console.log('Ending conversation tracking:', {
-        ...prev,
-        endTime,
-        type: 'memory-only'
-      });
-      return { ...prev, endTime };
-    });
-  }, []);
-
-  const createConversationRecord = useCallback(async (
-    userId: string, 
-    data: ConversationData
-  ) => {
-    if (!data.endTime) {
-      console.error('Cannot create conversation record without end time');
-      return null;
+  const startTracking = useCallback(async (data: {
+    elevenLabsConversationId: string;
+    agentId: string;
+    startTime: string;
+    scenarioInfo: {
+      scenario_id: number;
+      title: string;
+      skill_ids: number[];
+    };
+  }) => {
+    if (!user?.id) {
+      console.log('Storing conversation data locally for guest user');
+      setPendingConversation(data);
+      return;
     }
 
-    const maxRetries = 3;
-    let attempt = 0;
+    try {
+      console.log('Starting conversation tracking with status: unknown');
+      const { data: result, error } = await supabase
+        .from('user_conversations')
+        .insert({
+          clerk_id: user.id,
+          agent_id: data.agentId,
+          elevenlabs_conversation_id: data.elevenLabsConversationId,
+          start_time: data.startTime,
+          scenario_info: data.scenarioInfo,
+          status: 'unknown'
+        })
+        .select();
 
-    while (attempt < maxRetries) {
-      try {
-        console.log(`Creating conversation record in database (attempt ${attempt + 1}):`, {
-          userId,
-          ...data
-        });
-
-        const { data: record, error } = await supabase
-          .from('user_conversations')
-          .insert({
-            clerk_id: userId,
-            agent_id: data.agentId,
-            elevenlabs_conversation_id: data.elevenLabsConversationId,
-            status: CALL_STATUS.SUCCESS,
-            start_time: data.startTime,
-            end_time: data.endTime,
-            metadata: {},
-            analysis: {},
-            data_collection_results: {}
-          })
-          .select()
-          .single();
-
-        if (error) {
-          if (error.code === '23503' && attempt < maxRetries - 1) {
-            // Foreign key violation - wait a bit and retry
-            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
-            attempt++;
-            continue;
-          }
-          console.error('Failed to create conversation record:', error);
-          throw error;
-        }
-
-        console.log('Successfully created conversation record:', record);
-        return record;
-
-      } catch (error) {
-        if (attempt === maxRetries - 1) {
-          console.error('Error in createConversationRecord:', error);
-          throw error;
-        }
-        attempt++;
+      if (error) {
+        console.error('Database error during start tracking:', error);
+        throw error;
       }
+
+      console.log('Successfully started tracking:', result);
+      return result[0];
+    } catch (error) {
+      console.error('Failed to start conversation tracking:', error);
+      throw error;
     }
-    
-    // Clear the conversation data from memory
-    setConversationData(null);
-    return null;
-  }, [supabase]);
+  }, [supabase, user]);
+
+  const endTracking = useCallback(async (data: {
+    elevenLabsConversationId: string;
+    endTime: string;
+    transcript?: Message[];
+    analysis?: any;
+    success?: boolean;
+  }) => {
+    if (!user?.id) {
+      console.log('Updating pending conversation data for guest user');
+      setPendingConversation(prev => prev ? {
+        ...prev,
+        ...data
+      } : null);
+      return;
+    }
+
+    try {
+      const status: CallStatus = data.success ? 'success' : 'failure';
+      console.log('Ending conversation with status:', status);
+      
+      const { error } = await supabase
+        .from('user_conversations')
+        .update({
+          end_time: data.endTime,
+          transcript: data.transcript || [],
+          analysis: data.analysis || {},
+          status
+        })
+        .eq('elevenlabs_conversation_id', data.elevenLabsConversationId);
+
+      if (error) {
+        console.error('Database error during end tracking:', error);
+        throw error;
+      }
+
+      console.log('Successfully ended tracking for:', data.elevenLabsConversationId);
+    } catch (error) {
+      console.error('Failed to end conversation tracking:', error);
+      throw error;
+    }
+  }, [supabase, user]);
+
+  const syncPendingConversation = useCallback(async () => {
+    if (!user?.id || !pendingConversation) return;
+
+    try {
+      console.log('Syncing pending conversation to database');
+      await startTracking(pendingConversation);
+      
+      if (pendingConversation.endTime) {
+        await endTracking({
+          elevenLabsConversationId: pendingConversation.elevenLabsConversationId,
+          endTime: pendingConversation.endTime,
+          transcript: pendingConversation.transcript,
+          analysis: pendingConversation.analysis,
+          success: pendingConversation.success
+        });
+      }
+
+      setPendingConversation(null);
+    } catch (error) {
+      console.error('Failed to sync pending conversation:', error);
+    }
+  }, [user, pendingConversation, startTracking, endTracking]);
 
   return {
     startTracking,
     endTracking,
-    createConversationRecord,
-    conversationData,
-    clearConversationData: () => setConversationData(null)
+    pendingConversation,
+    syncPendingConversation
   };
 }

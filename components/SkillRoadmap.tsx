@@ -225,4 +225,26 @@ const SkillRoadmap: React.FC<SkillRoadmapProps> = ({
   );
 };
 
+const transformSkillData = (
+  traits: any,
+  weights: any,
+  stages: any
+): SkillRoadmapProps => ({
+  learningPath: traits.map(trait => ({
+    skill_id: trait.skill_id,
+    priority_level: calculatePriorityLevel(trait, weights),
+    learning_activities: trait.learning_activities,
+    estimated_duration: trait.estimated_duration
+  })),
+  prioritizedSkills: weights.map(weight => ({
+    skill_id: weight.skill_id,
+    priority_score: weight.weight,
+    development_stage: {
+      current: stages[weight.skill_id]?.current || 'beginning',
+      target: stages[weight.skill_id]?.target || 'mastering',
+      readiness: weight.weight // 0-1 value from practice results
+    }
+  }))
+});
+
 export default SkillRoadmap; 

@@ -11,6 +11,7 @@ import { LanguageProvider } from "@/context/LanguageContext";
 import { WidgetProvider } from "@/context/WidgetContext";
 import { usePathname } from 'next/navigation';
 import { Toaster } from 'sonner';
+import { SupabaseProvider } from '@/contexts/SupabaseContext';
 
 const poppins = Poppins({ 
   subsets: ['latin'],
@@ -53,13 +54,15 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider>
-      <html lang="en">
-        <body>
-          <Suspense fallback={<div>Loading...</div>}>
-            <LayoutContent>{children}</LayoutContent>
-          </Suspense>
-        </body>
-      </html>
+      <SupabaseProvider>
+        <html lang="en">
+          <body>
+            <Suspense fallback={<div>Loading...</div>}>
+              <LayoutContent>{children}</LayoutContent>
+            </Suspense>
+          </body>
+        </html>
+      </SupabaseProvider>
     </ClerkProvider>
   );
 }

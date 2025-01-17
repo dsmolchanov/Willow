@@ -33,8 +33,8 @@ const items = [
     icon: BookOpen,
   },
   {
-    title: "Tasks",
-    url: "/dashboard/tasks",
+    title: "Classroom",
+    url: "/dashboard/lessons",
     icon: CheckSquare,
   },
   {

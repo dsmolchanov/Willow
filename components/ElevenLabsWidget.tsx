@@ -14,9 +14,18 @@ import { useUser } from "@clerk/nextjs";
 interface ElevenLabsWidgetProps {
   agentId: string;
   translationPath?: 'widget' | 'buddha.widget';
+  scenarioInfo: {
+    scenario_id: number;
+    title: string;
+    skill_ids: number[];
+  };
 }
 
-export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: ElevenLabsWidgetProps) {
+export function ElevenLabsWidget({ 
+  agentId, 
+  translationPath = 'widget',
+  scenarioInfo
+}: ElevenLabsWidgetProps) {
   const router = useRouter();
   const { isSignedIn, user } = useUser();
   const { language, t } = useLanguage();
@@ -28,7 +37,9 @@ export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: Eleven
     if (conversationData) {
       try {
         // Store complete conversation data in localStorage
-        const pendingConversations = JSON.parse(localStorage.getItem('willow_pending_conversations') || '[]');
+        const pendingConversations = JSON.parse(
+          localStorage.getItem('willow_pending_conversations') || '[]'
+        );
         
         const conversationRecord = {
           id: conversationData.elevenLabsConversationId,
@@ -39,34 +50,21 @@ export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: Eleven
           status: 'pending'
         };
         
-        // Add to pending conversations array
         pendingConversations.push(conversationRecord);
+        localStorage.setItem(
+          'willow_pending_conversations', 
+          JSON.stringify(pendingConversations)
+        );
         
-        // Store updated array
-        localStorage.setItem('willow_pending_conversations', JSON.stringify(pendingConversations));
-        
-        // Also store in willow_conversation_params for compatibility
-        const conversationParams = {
+        // Create URL parameters for sign-in redirect
+        const searchParams = new URLSearchParams({
           conversation: conversationData.elevenLabsConversationId,
           agent: conversationData.agentId,
           start_time: conversationData.startTime,
           end_time: endTime
-        };
-        localStorage.setItem('willow_conversation_params', JSON.stringify(conversationParams));
-        
-        console.log('Stored conversation data:', conversationParams);
-        
-        // Create the URL with properly encoded parameters
-        const searchParams = new URLSearchParams();
-        Object.entries(conversationParams).forEach(([key, value]) => {
-          if (value) searchParams.append(key, value);
         });
         
-        const url = `/sign-in?${searchParams.toString()}`;
-        console.log('Redirecting to:', url);
-        
-        // Use router.push for client-side navigation
-        router.push(url);
+        router.push(`/sign-in?${searchParams.toString()}`);
       } catch (error) {
         console.error('Failed to store conversation:', error);
         router.push('/sign-in');
@@ -118,51 +116,48 @@ export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: Eleven
       console.log('ElevenLabs session response:', conversationId);
       
       if (conversationId && typeof conversationId === 'string') {
-        // Only store in memory, no database operation
+        // Store in memory with scenario info
         startTracking({
           elevenLabsConversationId: conversationId,
           agentId,
-          startTime: new Date().toISOString()
+          startTime: new Date().toISOString(),
+          scenarioInfo
         });
       }
     } catch (error) {
       console.error('Failed to start conversation:', error);
     }
-  }, [conversation, agentId, startTracking]);
+  }, [conversation, agentId, startTracking, scenarioInfo]);
 
   const handleStop = useCallback(async () => {
-    // Prevent multiple executions
     if (isHandlingStop) return;
     setIsHandlingStop(true);
 
     try {
+      console.log('Stop handling - User status:', { 
+        isSignedIn, 
+        userId: user?.id, 
+        conversationData: conversation.elevenLabsConversationId
+      });
+
       const endTime = new Date().toISOString();
       
       // End ElevenLabs session
       await conversation.endSession();
       
-      // Update memory storage with end time
-      endTracking(endTime);
-      
-      // Wait for state update
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
       if (isSignedIn && user) {
-        if (conversationData) {
-          try {
-            await createConversationRecord(user.id, {
-              ...conversationData,
-              endTime
-            });
-            router.push('/dashboard');
-          } catch (error) {
-            console.error('Failed to store conversation:', error);
-            router.push('/dashboard');
-          }
-        } else {
+        try {
+          await endTracking({
+            elevenLabsConversationId: conversation.elevenLabsConversationId,
+            endTime,
+            success: true
+          });
+          router.push('/dashboard');
+        } catch (error) {
+          console.error('Failed to store conversation:', error);
           router.push('/dashboard');
         }
-      } else {
+      } else if (!isSignedIn) {
         await storeConversationAndRedirect(endTime);
       }
     } catch (error) {
@@ -173,7 +168,15 @@ export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: Eleven
     } finally {
       setIsHandlingStop(false);
     }
-  }, [conversation, isSignedIn, router, conversationData, endTracking, user, createConversationRecord, isHandlingStop, storeConversationAndRedirect]);
+  }, [
+    conversation, 
+    isSignedIn, 
+    router, 
+    endTracking, 
+    user, 
+    isHandlingStop, 
+    storeConversationAndRedirect
+  ]);
 
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ audio: true })
@@ -191,6 +194,26 @@ export function ElevenLabsWidget({ agentId, translationPath = 'widget' }: Eleven
   // Split the path for nested translations
   const [section, subsection] = translationPath.split('.');
   const getText = (key: string) => subsection ? t(section, subsection)[key] : t(section, key);
+
+  // Add cleanup effect to log state on unmount
+  useEffect(() => {
+    return () => {
+      console.log('ElevenLabsWidget unmounting - State:', {
+        isSignedIn,
+        userId: user?.id,
+        conversationData,
+        isHandlingStop
+      });
+    };
+  }, [isSignedIn, user, conversationData, isHandlingStop]);
+
+  console.log('Widget state:', {
+    conversationId: conversation?.elevenLabsConversationId,
+    isLoading: conversation?.isLoading,
+    hasScenarioInfo: !!scenarioInfo,
+    agentId,
+    status: conversation?.status
+  });
 
   return (
     <div className="w-[600px]">

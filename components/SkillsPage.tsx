@@ -54,6 +54,19 @@ async function parseJsonResponse(response: Response): Promise<any> {
   }
 }
 
+interface DashboardRightRailProps {
+  focusedSkills: Array<{
+    skill_id: number;
+    name: string;
+    priority_level: string;
+  }>;
+  onRemoveSkill: (skillId: number) => void;
+  onStartSession: () => void;
+  isLoading: boolean;
+  selectedVoice: string | null;
+  onVoiceChange: (voiceId: string) => void;
+}
+
 export default function SkillsPage() {
   const supabase = createClientComponentClient();
   const { user, isLoaded } = useUser();
@@ -69,6 +82,7 @@ export default function SkillsPage() {
     percentage: 0,
     message: ''
   });
+  const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -147,9 +161,9 @@ export default function SkillsPage() {
   };
 
   const handleStartSession = async () => {
-    if (!user || focusedSkills.length === 0) {
+    if (!user || focusedSkills.length === 0 || !selectedVoice) {
       toast.error('Cannot start session', {
-        description: 'Please select at least one skill to focus on.',
+        description: 'Please select at least one skill and a voice to focus on.',
       });
       return;
     }
@@ -160,11 +174,10 @@ export default function SkillsPage() {
     setIsSheetOpen(true);
   
     try {
-      // Create the request payload
       const payload = {
         skill_ids: focusedSkills.map(s => s.skill_id),
         language: "ru",
-        voice_id: "8M81RK3MD7u4DOJpu2G5",
+        voice_id: selectedVoice,
         clerk_id: user.id
       };
   
@@ -184,12 +197,17 @@ export default function SkillsPage() {
   
       const data = await response.json();
       setProgress({ percentage: 100, message: 'Scenario generated successfully!' });
-      setScenarioData(data);
       
-      toast.success('Scenario generated successfully', {
-        description: 'You can now practice with the generated scenario.',
-      });
-  
+      // Close the sheet
+      setIsSheetOpen(false);
+      
+      // Redirect to lessons page with the new scenario
+      if (data.scenario_id) {
+        window.location.href = `/dashboard/lessons?scenario=${data.scenario_id}&tab=practice`;
+      } else {
+        throw new Error('No scenario ID in response');
+      }
+      
     } catch (error) {
       console.error('Scenario generation error:', {
         error,
@@ -243,6 +261,8 @@ export default function SkillsPage() {
               onRemoveSkill={(skillId) => handleToggleFocusSkill(skillId, '', '')}
               onStartSession={handleStartSession}
               isLoading={isGeneratingScenario}
+              selectedVoice={selectedVoice}
+              onVoiceChange={setSelectedVoice}
             />
           </div>
         </div>

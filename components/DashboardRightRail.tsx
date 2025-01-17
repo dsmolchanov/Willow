@@ -1,110 +1,220 @@
 'use client';
 
-import React from 'react';
-import { Card } from '@/components/ui/card';
-import { Trash2, Plus, Play } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { X, Play, Pause } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useEffect, useState, useRef } from "react";
+import { useClerkSupabaseClient } from '@/hooks/useClerkSupabaseClient';
+import { useSession } from '@clerk/nextjs';
+import { useSupabase } from '@/contexts/SupabaseContext';
 
-interface Skill {
-  skill_id: number;
+interface Voice {
+  voice_id: string;
   name: string;
-  priority_level: string;
+  gender: string;
+  description: string;
+  avatar_image_url: string;
+  audio_sample_url: string;
 }
 
 interface DashboardRightRailProps {
-  focusedSkills: Skill[];
+  focusedSkills: Array<{
+    skill_id: number;
+    name: string;
+    priority_level: string;
+  }>;
   onRemoveSkill: (skillId: number) => void;
   onStartSession: () => void;
   isLoading: boolean;
+  selectedVoice: string | null;
+  onVoiceChange: (voiceId: string) => void;
 }
 
-export function DashboardRightRail({ 
-  focusedSkills, 
+export function DashboardRightRail({
+  focusedSkills,
   onRemoveSkill,
   onStartSession,
-  isLoading 
+  isLoading,
+  selectedVoice,
+  onVoiceChange
 }: DashboardRightRailProps) {
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'critical': return 'bg-red-500';
-      case 'high': return 'bg-orange-500';
-      case 'medium': return 'bg-yellow-500';
-      case 'low': return 'bg-blue-500';
-      default: return 'bg-gray-500';
+  const { session } = useSession();
+  const supabase = useSupabase();
+  const [voices, setVoices] = useState<Voice[]>([]);
+  const [selectedLanguage, setSelectedLanguage] = useState('ru');
+  const [playingAudio, setPlayingAudio] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const fetchVoices = async () => {
+      if (!session) return;
+
+      console.log('Fetching voices with Clerk session');
+      
+      try {
+        const { data, error } = await supabase
+          .from('voices')
+          .select('*')
+          .eq('language', selectedLanguage)
+          .eq('is_active', true);
+
+        console.log('Fetched voices:', { data, error });
+
+        if (error) {
+          console.error('Error fetching voices:', error);
+          return;
+        }
+
+        setVoices(data || []);
+        if (!selectedVoice && data && data.length > 0) {
+          onVoiceChange(data[0].voice_id);
+        }
+      } catch (err) {
+        console.error('Unexpected error in fetchVoices:', err);
+      }
+    };
+
+    fetchVoices();
+  }, [selectedLanguage, supabase, selectedVoice, onVoiceChange, session]);
+
+  const handlePlaySample = (voiceId: string, sampleUrl: string) => {
+    if (playingAudio === voiceId) {
+      audioRef.current?.pause();
+      setPlayingAudio(null);
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      audioRef.current = new Audio(sampleUrl);
+      audioRef.current.play();
+      audioRef.current.onended = () => setPlayingAudio(null);
+      setPlayingAudio(voiceId);
     }
   };
 
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
   return (
-    <div className="w-64 flex-shrink-0 p-4 border-l">
-      <div className="sticky top-4">
-        <div className="flex flex-col gap-4">
-          <Button 
-            className="w-full"
-            size="lg"
-            disabled={focusedSkills.length === 0 || isLoading}
-            onClick={onStartSession}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 mr-2" />
-                Start Session
-              </>
-            )}
-          </Button>
-
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Focus Skills</h3>
-              <span className="text-sm text-gray-500">
-                {focusedSkills.length}/5
-              </span>
-            </div>
-
-            {focusedSkills.length === 0 ? (
-              <p className="text-sm text-gray-500">
-                Add up to 5 skills from your skill roadmap to focus on.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {focusedSkills.map((skill) => (
-                  <Card key={skill.skill_id} className="p-3 relative group hover:shadow-md transition-shadow">
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-start justify-between">
-                        <h4 className="font-medium text-sm">{skill.name}</h4>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-gray-400 hover:text-red-500 -mt-1 -mr-1"
-                          onClick={() => onRemoveSkill(skill.skill_id)}
-                          disabled={isLoading}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${getPriorityColor(skill.priority_level)}`} />
-                        <span className="text-xs text-gray-600 capitalize">{skill.priority_level}</span>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>Skill Choice</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Skills List */}
+        <div className="space-y-4">
+          {focusedSkills.map((skill) => (
+            <div
+              key={skill.skill_id}
+              className="flex items-center justify-between gap-2 p-2 bg-secondary/20 rounded-lg"
+            >
+              <div className="flex items-center gap-2">
+                <Badge variant={skill.priority_level as any}>
+                  {skill.priority_level}
+                </Badge>
+                <span className="text-sm font-medium">{skill.name}</span>
               </div>
-            )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onRemoveSkill(skill.skill_id)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
 
-            {focusedSkills.length > 0 && focusedSkills.length < 5 && (
-              <p className="text-xs text-gray-500 mt-3">
-                {5 - focusedSkills.length} more skill{5 - focusedSkills.length !== 1 ? 's' : ''} can be added
-              </p>
-            )}
+        {/* Language Selection */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Language</label>
+          <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ru">Russian</SelectItem>
+              <SelectItem value="en">English</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Voice Selection List */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Choose a voice</label>
+          <div className="space-y-2">
+            {voices.map((voice) => (
+              <div
+                key={voice.voice_id}
+                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors
+                  ${selectedVoice === voice.voice_id 
+                    ? 'border-primary bg-primary/5' 
+                    : 'border-border hover:border-primary/50'}`}
+                onClick={() => onVoiceChange(voice.voice_id)}
+              >
+                <div className="flex-shrink-0">
+                  <img 
+                    src={voice.avatar_image_url} 
+                    alt={voice.name}
+                    className="w-10 h-10 rounded-full"
+                  />
+                </div>
+                <div className="flex-grow">
+                  <div className="font-medium">{voice.name}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {voice.gender} • {voice.description}
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="flex-shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePlaySample(voice.voice_id, voice.audio_sample_url);
+                  }}
+                >
+                  {playingAudio === voice.voice_id ? (
+                    <Pause className="h-4 w-4" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
-    </div>
+
+        {/* Start Session Button */}
+        <div className="pt-4 border-t">
+          <Button
+            className="w-full"
+            onClick={onStartSession}
+            disabled={isLoading || focusedSkills.length === 0 || !selectedVoice}
+          >
+            {isLoading ? (
+              <Spinner className="mr-2 h-4 w-4" />
+            ) : null}
+            Start Session
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 } 

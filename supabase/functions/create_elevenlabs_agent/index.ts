@@ -3,125 +3,239 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Initialize Supabase client
-const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+// Type definitions for better code organization and validation
+interface RequestBody {
+  scenario_id: number;
+  language: string;
+  title: string;
+  description: string;
+  prompt: string;
+  first_message: string;
+  voice_id: string | null;
+  skill_ids: number[];
+}
 
-// ElevenLabs API Endpoint
-const ELEVENLABS_CREATE_AGENT_URL = "https://api.elevenlabs.io/v1/convai/agents/create";
+interface Skill {
+  name: string;
+  eval_prompt: string;
+}
 
-// Configuration for retries
-const MAX_RETRIES = 5;
-const BACKOFF_FACTOR = 2;
+interface AgentResponse {
+  agent_id: string;
+  [key: string]: any;
+}
+
+// Configuration constants
+const CONFIG = {
+  ELEVENLABS_API: {
+    CREATE_AGENT_URL: "https://api.elevenlabs.io/v1/convai/agents/create",
+    TIMEOUT: 60000, // 60 seconds
+    MAX_RETRIES: 5,
+    BACKOFF_FACTOR: 2,
+  },
+  DEFAULT_VOICE_ID: "21m00Tcm4TlvDq8ikWAM",
+  MAX_PROMPT_LENGTH: 800,
+} as const;
+
+// Initialize Supabase client with error handling
+const initSupabaseClient = () => {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  
+  if (!url || !key) {
+    throw new Error("Missing required environment variables for Supabase client");
+  }
+  
+  return createClient(url, key);
+};
+
+// Logging utility for consistent log format
+const logger = {
+  info: (message: string, data?: any) => {
+    console.log(JSON.stringify({
+      level: "info",
+      timestamp: new Date().toISOString(),
+      message,
+      data
+    }));
+  },
+  error: (message: string, error: any) => {
+    console.error(JSON.stringify({
+      level: "error",
+      timestamp: new Date().toISOString(),
+      message,
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined
+    }));
+  }
+};
 
 /**
- * Fetch a scenario by ID from Supabase
+ * Updates the scenario status in the database
  */
-async function fetchScenario(scenarioId: string) {
-  const { data, error } = await supabase
-    .from("scenarios")
-    .select("*")
-    .eq("scenario_id", scenarioId)
-    .single();
+async function updateScenarioStatus(
+  supabase: any,
+  scenarioId: number,
+  status: 'pending' | 'processing' | 'completed' | 'failed',
+  errorDetails: any = null
+) {
+  try {
+    // Get current timezone offset
+    const now = new Date();
+    const tzOffset = -now.getTimezoneOffset();
+    const hours = Math.floor(Math.abs(tzOffset) / 60);
+    const minutes = Math.abs(tzOffset) % 60;
+    const tzString = `${tzOffset >= 0 ? '+' : '-'}${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    const timestamp = now.toISOString().slice(0, 19) + tzString;
 
-  if (error) {
-    throw new Error(`Error fetching scenario: ${error.message}`);
+    // Prepare update data
+    const updateData: any = {
+      agent_status: status,
+      updated_at: timestamp
+    };
+
+    // Only include error_details if provided and status is 'failed'
+    if (status === 'failed' && errorDetails) {
+      updateData.error_details = errorDetails;
+    }
+
+    const { error } = await supabase
+      .from('scenarios')
+      .update(updateData)
+      .eq('scenario_id', scenarioId);
+
+    if (error) throw error;
+    
+    logger.info(`Updated scenario ${scenarioId} status to ${status}`);
+  } catch (error) {
+    logger.error(`Failed to update scenario ${scenarioId} status`, error);
+    throw error;
   }
-
-  return data;
 }
 
 /**
- * Fetch related skills and create criteria array
+ * Fetches evaluation criteria from the skills table
  */
-async function fetchCriteria(skillIds: string[]): Promise<{ name: string; prompt: string }[]> {
-  const { data, error } = await supabase
-    .from("skills")
-    .select("name, eval_prompt")
-    .in("skill_id", skillIds);
+async function fetchCriteria(supabase: any, skillIds: number[]): Promise<{ name: string; prompt: string }[]> {
+  try {
+    const { data, error } = await supabase
+      .from("skills")
+      .select("name, eval_prompt")
+      .in("skill_id", skillIds);
 
-  if (error) {
-    throw new Error(`Error fetching skills: ${error.message}`);
+    if (error) throw error;
+    if (!data || !data.length) {
+      logger.info(`No criteria found for skill IDs: ${skillIds.join(', ')}`);
+      return [];
+    }
+
+    return data.map((skill: Skill) => ({
+      name: skill.name,
+      prompt: skill.eval_prompt,
+    }));
+  } catch (error) {
+    logger.error("Error fetching criteria", error);
+    throw new Error(`Failed to fetch criteria: ${error.message}`);
   }
-
-  // Create criteria array
-  const criteriaArray = data.map((skill: any) => ({
-    name: skill.name,
-    prompt: skill.eval_prompt,
-  }));
-
-  return criteriaArray;
 }
 
 /**
- * Create an agent in ElevenLabs
+ * Creates an agent in ElevenLabs with retry logic
  */
-async function createAgent(conversationConfig: any) {
+async function createAgent(config: any): Promise<string> {
   const headers = {
     "Content-Type": "application/json",
     "xi-api-key": Deno.env.get("XI_API_KEY")!,
   };
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= CONFIG.ELEVENLABS_API.MAX_RETRIES; attempt++) {
     try {
-      const response = await fetch(ELEVENLABS_CREATE_AGENT_URL, {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        CONFIG.ELEVENLABS_API.TIMEOUT
+      );
+
+      const response = await fetch(CONFIG.ELEVENLABS_API.CREATE_AGENT_URL, {
         method: "POST",
         headers,
-        body: JSON.stringify(conversationConfig)
+        body: JSON.stringify(config),
+        signal: controller.signal
       });
 
-      if (response.ok) {
-        const responseData = await response.json();
-        console.log("Successfully created agent:", responseData);
-        return responseData.agent_id;
-      } else {
-        const errorText = await response.text();
-        console.error(`Failed to create agent. Status: ${response.status}, Response: ${errorText}`);
+      clearTimeout(timeoutId);
 
-        if (response.status >= 500 && response.status < 600) {
-          // Server error, retry
-          const waitTime = BACKOFF_FACTOR ** attempt;
-          console.log(`Server error. Retrying in ${waitTime} seconds...`);
-          await new Promise((resolve) => setTimeout(resolve, waitTime * 1000));
-        } else {
-          // Client error, do not retry
-          throw new Error(`Client error: ${response.status} - ${errorText}`);
-        }
+      if (response.ok) {
+        const data: AgentResponse = await response.json();
+        logger.info("Successfully created agent", { agent_id: data.agent_id });
+        return data.agent_id;
       }
+
+      const errorText = await response.text();
+      logger.error(`Failed to create agent on attempt ${attempt}`, {
+        status: response.status,
+        response: errorText
+      });
+
+      if (response.status >= 500 && attempt < CONFIG.ELEVENLABS_API.MAX_RETRIES) {
+        const waitTime = CONFIG.ELEVENLABS_API.BACKOFF_FACTOR ** attempt * 1000;
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+
+      throw new Error(`Failed to create agent: ${errorText}`);
     } catch (error) {
-      console.error(`Attempt ${attempt} - Error creating agent: ${error}`);
-      if (attempt < MAX_RETRIES) {
-        const waitTime = BACKOFF_FACTOR ** attempt;
-        console.log(`Retrying in ${waitTime} seconds...`);
-        await new Promise((resolve) => setTimeout(resolve, waitTime * 1000));
-      } else {
-        throw new Error("Max retries exceeded. Failed to create agent.");
+      if (error.name === 'AbortError') {
+        throw new Error(`Request timed out after ${CONFIG.ELEVENLABS_API.TIMEOUT}ms`);
       }
+      
+      if (attempt === CONFIG.ELEVENLABS_API.MAX_RETRIES) {
+        throw error;
+      }
+
+      const waitTime = CONFIG.ELEVENLABS_API.BACKOFF_FACTOR ** attempt * 1000;
+      await new Promise(resolve => setTimeout(resolve, waitTime));
     }
   }
 
-  throw new Error("Failed to create agent after retries.");
+  throw new Error("Failed to create agent after all retries");
 }
 
 /**
- * Update scenario with agent_id
+ * Updates the scenario with the created agent ID and sets status to completed
  */
-async function updateScenarioAgentId(scenarioId: string, agentId: string) {
-  const { error } = await supabase
-    .from("scenarios")
-    .update({ agent_id: agentId })
-    .eq("scenario_id", scenarioId);
+async function updateScenarioAgentId(supabase: any, scenarioId: number, agentId: string) {
+  try {
+    // Get current timezone offset
+    const now = new Date();
+    const tzOffset = -now.getTimezoneOffset();
+    const hours = Math.floor(Math.abs(tzOffset) / 60);
+    const minutes = Math.abs(tzOffset) % 60;
+    const tzString = `${tzOffset >= 0 ? '+' : '-'}${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    
+    // Format timestamp with timezone
+    const timestamp = now.toISOString().slice(0, 19) + tzString;
 
-  if (error) {
-    throw new Error(`Error updating scenario with agent_id: ${error.message}`);
+    const { error } = await supabase
+      .from("scenarios")
+      .update({ 
+        agent_id: agentId,
+        agent_status: 'completed',
+        updated_at: timestamp
+      })
+      .eq("scenario_id", scenarioId);
+
+    if (error) throw error;
+    
+    logger.info(`Updated scenario ${scenarioId} with agent ID ${agentId} and status completed`);
+  } catch (error) {
+    logger.error(`Failed to update scenario ${scenarioId} with agent ID`, error);
+    throw error;
   }
-
-  return true;
 }
 
 /**
- * Construct conversation_config based on scenario data and input parameters
+ * Constructs the conversation configuration for ElevenLabs
  */
 function constructConversationConfig(
   name: string,
@@ -129,14 +243,14 @@ function constructConversationConfig(
   firstMessage: string,
   language: string,
   criteria: { name: string; prompt: string }[],
-  voice_id: string | null
+  voiceId: string | null
 ): any {
   return {
     conversation_config: {
-      name: name,
+      name,
       agent: {
         prompt: {
-          prompt: prompt,
+          prompt,
           llm: "gpt-4o-mini",
           temperature: 0.7,
           max_tokens: 1500,
@@ -144,7 +258,7 @@ function constructConversationConfig(
           knowledge_base: []
         },
         first_message: firstMessage,
-        language: language,
+        language,
         timeout: 30,
         num_retries: 3,
         error_message: language === 'ru' 
@@ -158,7 +272,7 @@ function constructConversationConfig(
       },
       tts: {
         model_id: "eleven_turbo_v2_5",
-        voice_id: voice_id || "21m00Tcm4TlvDq8ikWAM",  // Use provided voice_id or default
+        voice_id: voiceId || CONFIG.DEFAULT_VOICE_ID,
         optimize_streaming_latency: 0,
         stability: 0.5,
         similarity_boost: 0.75,
@@ -174,87 +288,143 @@ function constructConversationConfig(
           id: `criterion_${index + 1}`,
           name: c.name,
           type: "prompt",
-          conversation_goal_prompt: (c.prompt || "").substring(0, 800)
+          conversation_goal_prompt: (c.prompt || "").substring(0, CONFIG.MAX_PROMPT_LENGTH)
         }))
       }
     }
   };
 }
 
-serve(async (req) => {
+/**
+ * Validates the request body
+ */
+function validateRequest(body: any): RequestBody {
+  const requiredFields = [
+    'scenario_id',
+    'language',
+    'title',
+    'prompt',
+    'first_message',
+    'skill_ids'
+  ];
+
+  for (const field of requiredFields) {
+    if (!(field in body)) {
+      throw new Error(`Missing required field: ${field}`);
+    }
+  }
+
+  if (!Array.isArray(body.skill_ids) || body.skill_ids.length === 0) {
+    throw new Error("skill_ids must be a non-empty array");
+  }
+
+  return body as RequestBody;
+}
+
+/**
+ * Main processing function for agent creation
+ */
+async function processAgentCreation(supabase: any, requestBody: RequestBody) {
+  const {
+    scenario_id,
+    language,
+    title,
+    prompt,
+    first_message,
+    voice_id,
+    skill_ids
+  } = requestBody;
+
   try {
-    if (req.method !== "POST") {
-      return new Response("Method Not Allowed", { status: 405 });
-    }
+    await updateScenarioStatus(supabase, scenario_id, 'processing');
 
-    const { scenario_id, language } = await req.json();
-
-    if (!scenario_id) {
-      return new Response("Missing 'scenario_id' in request body.", { status: 400 });
-    }
-
-    if (!language) {
-      return new Response("Missing 'language' in request body.", { status: 400 });
-    }
-
-    // Fetch scenario data
-    const scenario = await fetchScenario(scenario_id);
-    if (!scenario) {
-      return new Response("Scenario not found.", { status: 404 });
-    }
-
-    const name: string = scenario.title || scenario.description;
-    const prompt: string = scenario.prompt;
-    const firstMessage: string = scenario.first_message;
-    const voice_id: string | null = scenario.voice_id;  // Get voice_id from scenario
-
-    if (!name || !prompt || !firstMessage) {
-      return new Response("Scenario title, prompt, or first_message is missing.", { status: 400 });
-    }
-
-    // Fetch related skills and create criteria array
-    const skillIds: string[] = scenario.skill_ids || [];
-    if (skillIds.length === 0) {
-      return new Response("No associated skills found for this scenario.", { status: 400 });
-    }
-
-    const criteria = await fetchCriteria(skillIds);
-    if (criteria.length === 0) {
-      console.warn("No criteria found for the associated skills.");
-    }
-
-    // Construct conversation_config with voice_id
+    const criteria = await fetchCriteria(supabase, skill_ids);
+    
     const conversationConfig = constructConversationConfig(
-      name,
+      title,
       prompt,
-      firstMessage,
+      first_message,
       language,
       criteria,
-      voice_id  // Pass voice_id to config
+      voice_id
     );
 
-    // Create ElevenLabs agent
     const agentId = await createAgent(conversationConfig);
-    if (!agentId) {
-      return new Response("Failed to create ElevenLabs agent.", { status: 500 });
+    await updateScenarioAgentId(supabase, scenario_id, agentId);
+
+    return { 
+      success: true,
+      agent_id: agentId 
+    };
+  } catch (error) {
+    const now = new Date();
+    const tzOffset = -now.getTimezoneOffset();
+    const hours = Math.floor(Math.abs(tzOffset) / 60);
+    const minutes = Math.abs(tzOffset) % 60;
+    const tzString = `${tzOffset >= 0 ? '+' : '-'}${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    const timestamp = now.toISOString().slice(0, 19) + tzString;
+
+    await updateScenarioStatus(supabase, scenario_id, 'failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: timestamp
+    });
+    throw error;
+  }
+}
+
+// Main serve function
+serve(async (req: Request) => {
+  const supabase = initSupabaseClient();
+  
+  try {
+    if (req.method !== "POST") {
+      return new Response(
+        JSON.stringify({ error: "Method not allowed" }), 
+        { 
+          status: 405,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
     }
 
-    // Update scenario with agent_id
-    await updateScenarioAgentId(scenario_id, agentId);
+    const requestBody = validateRequest(await req.json());
 
-    // Respond with success
+    // Set initial status
+    await updateScenarioStatus(supabase, requestBody.scenario_id, 'processing');
+
+    // Start agent creation in background
+    processAgentCreation(supabase, requestBody).catch(error => {
+      logger.error("Background processing failed", error);
+    });
+
+    // Return immediate response with scenario_id
     return new Response(
-      JSON.stringify({
-        message: "Conversational agent created and scenario updated successfully.",
-        agent_id: agentId,
+      JSON.stringify({ 
+        success: true,
+        scenario_id: requestBody.scenario_id,
+        agent_status: 'processing',
+        message: 'Agent creation started'
       }),
       {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
+        status: 202,
+        headers: { 
+          "Content-Type": "application/json"
+        }
       }
     );
-  } catch (error: any) {
-    console.error(`Error in create_elevenlabs_agent: ${error.message}`);
-    return new Response(`Internal Server Error: ${error.message}`, { status: 500 });
+  } catch (error) {
+    logger.error("Request processing failed", error);
+    
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Internal server error",
+        scenario_id: requestBody?.scenario_id,
+        agent_status: 'failed'
+      }),
+      {
+        status: error instanceof Error && error.message.includes("Missing required field") ? 400 : 500,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
   }
 });

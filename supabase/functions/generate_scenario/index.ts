@@ -89,6 +89,16 @@ async function callOpenAI(prompt: string): Promise<any> {
   return response;
 }
 
+// Utility function for timezone-aware timestamps
+function getTimestampWithTimezone(): string {
+  const now = new Date();
+  const tzOffset = -now.getTimezoneOffset();
+  const hours = Math.floor(Math.abs(tzOffset) / 60);
+  const minutes = Math.abs(tzOffset) % 60;
+  const tzString = `${tzOffset >= 0 ? '+' : '-'}${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  return now.toISOString().slice(0, 19) + tzString;
+}
+
 async function fetchUserTraits(clerk_id: string) {
   // First, let's get the most recent trait record for this user
   const { data, error } = await supabase
@@ -105,14 +115,14 @@ async function fetchUserTraits(clerk_id: string) {
       clerk_id,
       errorCode: error.code,
       errorMessage: error.message,
-      timestamp: new Date().toISOString()
+      timestamp: getTimestampWithTimezone()
     });
     return "No specific trait patterns found.";
   }
 
   // If no data was found, handle that case gracefully
   if (!data || data.length === 0) {
-    console.log(`No traits found for user ${clerk_id} at ${new Date().toISOString()}`);
+    console.log(`No traits found for user ${clerk_id} at ${getTimestampWithTimezone()}`);
     return "No specific trait patterns found.";
   }
 
@@ -299,7 +309,8 @@ serve(async (req) => {
         skill_ids: skillsData.map(skill => skill.skill_id),
         language,
         voice_id,
-        clerk_id
+        clerk_id,
+        agent_status: 'pending'
       })
       .select();
 
@@ -314,6 +325,7 @@ serve(async (req) => {
       JSON.stringify({
         message: "Scenario created successfully",
         scenario_id: insertData[0].scenario_id,
+        agent_status: 'pending',
         ...response,
         language,
         voice_id

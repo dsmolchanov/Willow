@@ -310,25 +310,52 @@ function calculatePriorityScore(weight: SkillWeight): number {
 // Functions that handle requests
 serve(async (req) => {
     try {
-        const { clerk_id, action_type } = await req.json()
+        // Get the notification payload from the request
+        const payload = await req.json()
+        console.log('Received payload:', payload)
+
+        const { clerk_id, analysis, scenario_info } = payload
 
         if (!clerk_id) {
             throw new Error('Clerk ID is required')
         }
 
+        // Get conversation data with analysis
         const [traitMappings, userTraits] = await Promise.all([
             loadTraitMappings(),
             loadUserTraits(clerk_id)
         ]);
 
-        switch (action_type) {
-            case 'initial_calculation':
-                return await handleInitialCalculation(clerk_id, userTraits, traitMappings)
-            case 'practice_update':
-                return await handlePracticeUpdate(clerk_id, userTraits, traitMappings)
-            default:
-                throw new Error('Invalid action type')
+        // If we have scenario_info with skill_ids, process those skills
+        if (scenario_info?.skill_ids?.length > 0) {
+            const weights = calculateSkillWeights(userTraits, traitMappings);
+            
+            // Filter weights to only include skills from this scenario
+            const scenarioWeights = weights.filter(w => 
+                scenario_info.skill_ids.includes(w.skill_id)
+            );
+
+            const { error: updateError } = await supabase
+                .from('user_skill_weights')
+                .upsert(scenarioWeights.map(weight => ({
+                    clerk_id: clerk_id,
+                    skill_id: weight.skill_id,
+                    weight_data: weight.weight_data,
+                    updated_at: new Date().toISOString()
+                })));
+
+            if (updateError) throw updateError;
+
+            const prioritizedSkills = calculateSkillPriorities(scenarioWeights);
+            const learningPath = await generateLearningPath(prioritizedSkills);
+
+            await storeLearningPathAndPrioritizedSkills(clerk_id, learningPath, prioritizedSkills);
         }
+
+        return new Response(
+            JSON.stringify({ success: true }),
+            { headers: { 'Content-Type': 'application/json' } }
+        )
     } catch (error) {
         console.error('Error:', error)
         return new Response(
@@ -389,51 +416,77 @@ async function loadUserTraits(clerkId: string, elevenlabsConversationId?: string
         return traitsData[0];
     }
 
-    // If no traits found and we have elevenlabs_conversation_id, try that specific conversation
+    // If no traits found and we have elevenlabs_conversation_id, get data from conversation
     if (elevenlabsConversationId) {
         console.log('Fetching specific conversation:', elevenlabsConversationId);
         
-        // First check if the conversation exists
-        const { data: convCheck, error: checkError } = await supabase
-            .from('user_conversations')
-            .select('id')
-            .eq('clerk_id', clerkId)
-            .eq('elevenlabs_conversation_id', elevenlabsConversationId);
-            
-        if (checkError) {
-            console.error('Error checking conversation:', checkError);
-            throw checkError;
-        }
-        
-        console.log('Conversation check result:', convCheck);
-        
-        if (!convCheck || convCheck.length === 0) {
-            throw new Error(`No conversation found with ID ${elevenlabsConversationId}`);
-        }
-
         const { data: convData, error: convError } = await supabase
             .from('user_conversations')
-            .select('data_collection_results')
+            .select('analysis')
             .eq('clerk_id', clerkId)
             .eq('elevenlabs_conversation_id', elevenlabsConversationId)
-            .maybeSingle();
+            .single();
 
         if (convError) {
-            console.error('Error fetching specific conversation:', convError);
+            console.error('Error fetching conversation:', convError);
             throw convError;
         }
 
-        console.log('Conversation data:', convData);
-
-        if (!convData || !convData.data_collection_results) {
-            throw new Error('No trait data found in the specified conversation');
+        if (!convData || !convData.analysis) {
+            throw new Error('No analysis found in the specified conversation');
         }
 
-        return convData.data_collection_results;
+        // Process evaluation results into traits
+        const evaluationResults = convData.analysis.evaluation_criteria_results;
+        return {
+            clerk_id: clerkId,
+            confidence_pattern: processConfidencePattern(evaluationResults),
+            interaction_style: processInteractionStyle(evaluationResults),
+            stakes_level: processStakesLevel(evaluationResults)
+        };
     }
+
+    throw new Error('No traits or conversation data found');
 }
 
-// Update handleInitialCalculation to handle async learning path generation
+function processConfidencePattern(evaluationResults: any) {
+    const confidenceResult = evaluationResults.criterion_1?.result;
+    return {
+        value: confidenceResult === 'success' 
+            ? 'PATTERN: confident > mastering'
+            : 'PATTERN: struggling > developing'
+    };
+}
+
+function processInteractionStyle(evaluationResults: any) {
+    const emotionalControl = evaluationResults.criterion_2?.result;
+    const engagement = evaluationResults.criterion_4?.result;
+    
+    let style = 'developing';
+    if (emotionalControl === 'success' && engagement === 'success') {
+        style = 'balanced_and_engaging';
+    } else if (emotionalControl === 'failure' && engagement === 'failure') {
+        style = 'needs_improvement';
+    }
+    
+    return { value: style };
+}
+
+function processStakesLevel(evaluationResults: any) {
+    const failureCount = Object.values(evaluationResults)
+        .filter((result: any) => result.result === 'failure')
+        .length;
+    
+    let level = 'low_stakes';
+    if (failureCount >= 3) {
+        level = 'high_stakes';
+    } else if (failureCount >= 1) {
+        level = 'medium_stakes';
+    }
+    
+    return { value: level };
+}
+
 async function handleInitialCalculation(
     clerkId: string,
     userTraits: UserTraits,
@@ -463,169 +516,6 @@ async function handleInitialCalculation(
     );
 }
 
-// Storing learning path & prioritized skills
-async function storeLearningPathAndPrioritizedSkills(
-    clerkId: string, 
-    learningPath: LearningPathNode[], 
-    prioritizedSkills: PrioritizedSkill[]
-) {
-    const { error } = await supabase
-        .from('user_learning_paths')
-        .insert([{
-            clerk_id: clerkId,
-            learning_path: learningPath,
-            prioritized_skills: prioritizedSkills,
-            created_at: new Date().toISOString()
-        }])
-
-    if (error) throw error
-}
-
-function calculateSkillWeights(
-    traits: UserTraits,
-    traitMappings: any[]
-): SkillWeight[] {
-    const skillWeights = new Map<number, SkillWeightCalculation>()
-
-    for (const mapping of traitMappings) {
-        if (!mapping.trait_skill_mappings) continue
-
-        for (const skillMapping of mapping.trait_skill_mappings) {
-            const currentWeight = skillWeights.get(skillMapping.skill_id) || 
-                createInitialWeight(skillMapping.skill_id)
-            
-            updateWeightFromTrait(
-                currentWeight,
-                mapping,
-                skillMapping,
-                traits
-            )
-
-            skillWeights.set(skillMapping.skill_id, currentWeight)
-        }
-
-        if (mapping.trait_development_stages) {
-            for (const stage of mapping.trait_development_stages) {
-                const weight = skillWeights.get(stage.skill_id)
-                if (weight) {
-                    updateDevelopmentStage(weight, stage, traits)
-                }
-            }
-        }
-    }
-
-    return Array.from(skillWeights.values()).map(formatSkillWeight)
-}
-
-function createInitialWeight(skillId: number): SkillWeightCalculation {
-    return {
-        skillId,
-        baseWeight: 0,
-        influences: [],
-        currentStage: 'developing',
-        targetStage: 'managing',
-        readinessScore: 0.5,
-        importanceEvidence: [],
-        learningFocus: [],
-        practiceAreas: []
-    }
-}
-
-function updateWeightFromTrait(
-    weight: SkillWeightCalculation,
-    traitPattern: any,
-    skillMapping: any,
-    traits: UserTraits
-) {
-    // Ensure these fields exist in traitPattern (placeholder assumption)
-    const traitType = traitPattern.trait_type || 'unknown_trait'
-    const patternKey = traitPattern.pattern_key || 'unknown_pattern'
-
-    if (skillMapping.importance > weight.baseWeight) {
-        weight.baseWeight = skillMapping.importance
-        weight.primaryTraitType = traitType
-    }
-
-    weight.influences.push({
-        trait_type: traitType,
-        pattern_key: patternKey,
-        importance: skillMapping.importance,
-        role: skillMapping.role,
-        indicators: skillMapping.indicators || []
-    })
-
-    if (skillMapping.practice_areas) {
-        weight.practiceAreas.push(...skillMapping.practice_areas)
-    }
-
-    weight.importanceEvidence.push({
-        reason: `${skillMapping.importance} importance from ${traitType}:${patternKey}`,
-        indicators: skillMapping.indicators || []
-    })
-}
-
-function updateDevelopmentStage(
-    weight: SkillWeightCalculation,
-    stage: any,
-    traits: UserTraits
-) {
-    const confidencePattern = traits.confidence_pattern.value || '';
-    const patternMatch = confidencePattern.match(/PATTERN:\s*([^|]+)/);
-    if (!patternMatch) {
-        weight.currentStage = 'developing';
-        weight.targetStage = 'managing';
-    } else {
-        const [current, target] = patternMatch[1].trim().split('>').map(s => s.trim());
-        weight.currentStage = current || 'developing';
-        weight.targetStage = target || 'managing';
-    }
-
-    weight.readinessScore = stage.readiness_score || weight.readinessScore;
-
-    if (stage.learning_focus) {
-        weight.learningFocus.push(...stage.learning_focus);
-    }
-}
-
-function formatSkillWeight(weight: SkillWeightCalculation): SkillWeight {
-    const uniqueLearningPath = Array.from(new Set(weight.learningFocus));
-    const uniquePracticeAreas = Array.from(new Set(weight.practiceAreas));
-
-    const uniqueImportanceFactors = weight.importanceEvidence.reduce((acc, factor) => {
-        const key = `${factor.reason}-${factor.indicators.join(',')}`;
-        if (!acc.has(key)) {
-            acc.set(key, factor);
-        }
-        return acc;
-    }, new Map<string, ImportanceFactor>());
-
-    return {
-        skill_id: weight.skillId,
-        weight_data: {
-            base_weight: weight.baseWeight,
-            trait_influences: weight.influences,
-            final_weight: calculateFinalWeight(weight),
-            development_stage: {
-                current: weight.currentStage,
-                target: weight.targetStage,
-                readiness: weight.readinessScore
-            },
-            evidence: {
-                importance_factors: Array.from(uniqueImportanceFactors.values()),
-                learning_path: uniqueLearningPath,
-                practice_areas: uniquePracticeAreas
-            }
-        }
-    };
-}
-
-function calculateFinalWeight(weight: SkillWeightCalculation): number {
-    const influenceMultiplier = weight.influences.length > 0 
-        ? weight.influences.reduce((sum, influence) => sum + influence.importance, 0) / weight.influences.length
-        : 1;
-    return weight.baseWeight * influenceMultiplier * weight.readinessScore;
-}
-
 async function handlePracticeUpdate(
     clerkId: string,
     userTraits: UserTraits,
@@ -636,21 +526,12 @@ async function handlePracticeUpdate(
         .select('*')
         .eq('clerk_id', clerkId);
 
-    const practiceResults = await supabase
-        .from('user_scenario_evaluations')
-        .select('*')
-        .eq('clerk_id', clerkId)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-    if (currentWeights.error) throw currentWeights.error
-    if (practiceResults.error) throw practiceResults.error
+    if (currentWeights.error) throw currentWeights.error;
 
     const updatedWeights = updateWeightsFromPractice(
         currentWeights.data,
-        practiceResults.data,
         userTraits
-    )
+    );
 
     const { error: updateError } = await supabase
         .from('user_skill_weights')
@@ -661,23 +542,22 @@ async function handlePracticeUpdate(
                 weight_data: weight.weight_data,
                 updated_at: new Date().toISOString()
             }))
-        )
+        );
 
-    if (updateError) throw updateError
+    if (updateError) throw updateError;
 
     return new Response(
         JSON.stringify({ success: true, weights: updatedWeights }),
         { headers: { 'Content-Type': 'application/json' } }
-    )
+    );
 }
 
 function updateWeightsFromPractice(
     currentWeights: SkillWeight[],
-    practiceResults: any[],
     userTraits: UserTraits
 ): SkillWeight[] {
     return currentWeights.map(weight => {
-        const relevantResults = practiceResults.filter(
+        const relevantResults = userTraits.filter(
             result => result.skill_id === weight.skill_id
         )
 
@@ -736,3 +616,88 @@ function updateDevelopmentStageFromPractice(
         readiness: newReadiness
     }
 }
+
+const handleInitialCalculation = async (data: {
+  clerk_id: string,
+  data_collection_results: any
+}) => {
+  // Process traits data and create initial weights
+  const traits = processTraitsData(data.data_collection_results);
+  
+  // Store initial traits
+  await supabase.from('user_traits').insert({
+    clerk_id: data.clerk_id,
+    stakes_level: traits.stakes_level,
+    interaction_style: traits.interaction_style,
+    confidence_pattern: traits.confidence_pattern,
+    // ... other traits
+  });
+
+  // Calculate initial skill weights
+  const initialWeights = calculateInitialWeights(traits);
+  await storeSkillWeights(data.clerk_id, initialWeights);
+};
+
+const handlePracticeUpdate = async (data: {
+  clerk_id: string,
+  evaluation_criteria_results: any
+}) => {
+  // Get current skill weights
+  const { data: currentWeights } = await supabase
+    .from('user_skill_weights')
+    .select('*')
+    .eq('clerk_id', data.clerk_id);
+
+  // Process evaluation results
+  const results = data.evaluation_criteria_results;
+  const updatedWeights = {};
+
+  // Map criteria to skills and update weights
+  for (const [criterionId, evaluation] of Object.entries(results)) {
+    const relatedSkills = await getSkillsByCriterion(criterionId);
+    
+    for (const skill of relatedSkills) {
+      const weightAdjustment = evaluation.result === 'success' ? 0.1 : -0.05;
+      updatedWeights[skill.id] = Math.max(0, Math.min(1, 
+        (currentWeights[skill.id] || 0.5) + weightAdjustment
+      ));
+    }
+  }
+
+  // Store updated weights
+  await updateSkillWeights(data.clerk_id, updatedWeights);
+
+  // Update development stages based on weight thresholds
+  await updateDevelopmentStages(data.clerk_id, updatedWeights);
+};
+
+// Main handler
+const handler = async (req: any) => {
+  const { clerk_id, action_type, elevenlabs_conversation_id } = req.body;
+
+  try {
+    // Get conversation data
+    const { data: conversation } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('id', elevenlabs_conversation_id)
+      .single();
+
+    if (action_type === 'initial_calculation') {
+      await handleInitialCalculation({
+        clerk_id,
+        data_collection_results: conversation.data_collection_results
+      });
+    } else {
+      await handlePracticeUpdate({
+        clerk_id,
+        evaluation_criteria_results: conversation.evaluation_criteria_results
+      });
+    }
+
+    return { status: 200, body: { success: true } };
+  } catch (error) {
+    console.error('Error processing traits/skills:', error);
+    return { status: 500, body: { error: error.message } };
+  }
+};

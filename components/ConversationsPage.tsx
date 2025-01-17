@@ -42,6 +42,25 @@ interface Conversation {
   replics_number: number;
   transcript: Message[];
   analysis: Analysis;
+  scenario_title?: string;
+}
+
+interface SkillProgress {
+  skill_id: number;
+  current_level: {
+    level: string;
+    success_rate: number;
+    last_updated: string;
+  };
+  practice_history: {
+    total_minutes: number;
+    session_count: number;
+    success_rate_trend: number[];
+  };
+}
+
+interface ConversationDetails extends Conversation {
+  skill_progress?: SkillProgress[];
 }
 
 function formatTime(date: string) {
@@ -73,31 +92,104 @@ export default function ConversationsPage() {
   const { user } = useUser();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [selectedConversation, setSelectedConversation] = useState<ConversationDetails | null>(null);
   const supabase = createClientComponentClient();
 
-  useEffect(() => {
-    const fetchConversations = async () => {
-      if (!user) return;
+  // Function to fetch conversations
+  const fetchConversations = async () => {
+    if (!user) return;
 
-      try {
-        const { data, error } = await supabase
-          .from('user_conversations')
-          .select('*')
-          .eq('clerk_id', user.id)
-          .order('start_time', { ascending: false });
+    try {
+      console.log('Fetching conversations for clerk_id:', user.id);
+      setIsLoading(true);
+      
+      // Get conversations
+      const { data: conversationsData, error: conversationsError } = await supabase
+        .from('user_conversations')
+        .select(`
+          *,
+          metadata
+        `)
+        .eq('clerk_id', user.id)
+        .order('start_time', { ascending: false });
 
-        if (error) throw error;
-
-        setConversations(data || []);
-      } catch (error) {
-        console.error('Error fetching conversations:', error);
-      } finally {
-        setIsLoading(false);
+      if (conversationsError) {
+        console.error('Error fetching conversations:', conversationsError);
+        return;
       }
-    };
 
+      // Transform conversations data
+      const conversationsWithTitles = conversationsData.map(conv => ({
+        ...conv,
+        // Try to get title from metadata if available, otherwise use default
+        scenario_title: conv.metadata?.scenario_title || 
+                       conv.metadata?.title || 
+                       `Conversation ${new Date(conv.start_time).toLocaleDateString()}`
+      }));
+
+      console.log('Processed conversations:', conversationsWithTitles);
+      
+      setConversations(conversationsWithTitles);
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch conversation with skill progress
+  const fetchConversationDetails = async (conversation: Conversation) => {
+    try {
+      const { data: skillProgress } = await supabase
+        .from('user_skill_tracking')
+        .select('*')
+        .eq('clerk_id', conversation.clerk_id)
+        .in('skill_id', conversation.skill_ids);
+
+      setSelectedConversation({
+        ...conversation,
+        skill_progress: skillProgress
+      });
+    } catch (error) {
+      console.error('Error fetching conversation details:', error);
+    }
+  };
+
+  // Update click handler
+  const handleConversationClick = (conversation: Conversation) => {
+    fetchConversationDetails(conversation);
+  };
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Initial fetch
     fetchConversations();
+
+    // Set up real-time subscription
+    const channel = supabase
+      .channel('user_conversations_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_conversations',
+          filter: `clerk_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('Received real-time update:', payload);
+          fetchConversations(); // Reload data when changes occur
+        }
+      )
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+      });
+
+    // Cleanup subscription
+    return () => {
+      channel.unsubscribe();
+    };
   }, [user, supabase]);
 
   if (isLoading) {
@@ -120,13 +212,13 @@ export default function ConversationsPage() {
             <div
               key={conversation.conversation_id}
               className="bg-white rounded-lg p-4 hover:bg-gray-50 transition-colors flex items-center justify-between cursor-pointer"
-              onClick={() => setSelectedConversation(conversation)}
+              onClick={() => handleConversationClick(conversation)}
             >
               <div className="flex items-center gap-3">
                 <MessageCircle className="w-5 h-5 text-gray-400" />
                 <div>
                   <h3 className="font-medium text-gray-900">
-                    {conversation.agent_id === 'doXNIsa8qmit1NjLQxgT' ? 'Onboarding Russian' : 'Onboarding English'}
+                    {conversation.scenario_title || 'Untitled Conversation'}
                   </h3>
                   <p className="text-sm text-gray-500">
                     {formatTime(conversation.start_time)}
@@ -231,22 +323,126 @@ export default function ConversationsPage() {
                   <TabsContent value="analysis" className="h-full overflow-y-auto px-6 py-4 m-0">
                     <div className="space-y-6">
                       <div>
+                        <h3 className="font-semibold mb-2 text-black">Call Status</h3>
+                        <p className={`text-black px-3 py-1 rounded-full inline-block ${
+                          selectedConversation.analysis?.call_successful === "success" 
+                            ? "bg-green-100" 
+                            : "bg-red-100"
+                        }`}>
+                          {selectedConversation.analysis?.call_successful}
+                        </p>
+                      </div>
+
+                      <div>
                         <h3 className="font-semibold mb-2 text-black">Summary</h3>
-                        <p className="text-black whitespace-pre-wrap">{selectedConversation.analysis?.transcript_summary}</p>
+                        <p className="text-black whitespace-pre-wrap bg-gray-50 rounded-lg p-4">
+                          {selectedConversation.analysis?.transcript_summary}
+                        </p>
                       </div>
                       
-                      <div>
-                        <h3 className="font-semibold mb-2 text-black">Analysis Results</h3>
-                        <div className="space-y-4">
-                          {selectedConversation.analysis?.data_collection_results && Object.entries(selectedConversation.analysis.data_collection_results).map(([key, value]) => (
-                            <div key={key} className="bg-gray-50 rounded-lg p-4">
-                              <h4 className="font-medium capitalize mb-2 text-black">{key.replace('_', ' ')}</h4>
-                              <p className="text-black mb-2">{value.value}</p>
-                              <p className="text-gray-600">{value.rationale}</p>
-                            </div>
-                          ))}
+                      {Object.keys(selectedConversation.analysis?.data_collection_results || {}).length > 0 && (
+                        <div>
+                          <h3 className="font-semibold mb-2 text-black">Data Collection Results</h3>
+                          <div className="space-y-4">
+                            {Object.entries(selectedConversation.analysis.data_collection_results).map(([key, value]: [string, any]) => (
+                              <div key={key} className="bg-gray-50 rounded-lg p-4">
+                                <h4 className="font-medium capitalize mb-2 text-black">{key.replace(/_/g, ' ')}</h4>
+                                <p className="text-black mb-2">{value.value}</p>
+                                <p className="text-gray-600">{value.rationale}</p>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
+
+                      {Object.keys(selectedConversation.analysis?.evaluation_criteria_results || {}).length > 0 && (
+                        <div>
+                          <h3 className="font-semibold mb-2 text-black">Evaluation Criteria Results</h3>
+                          <div className="space-y-4">
+                            {Object.entries(selectedConversation.analysis.evaluation_criteria_results).map(([key, value]: [string, any]) => (
+                              <div key={key} className="bg-gray-50 rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-2">
+                                  <h4 className="font-medium capitalize text-black">
+                                    {key.replace(/_/g, ' ')}
+                                  </h4>
+                                  <span className={`px-2 py-1 text-xs rounded-full ${
+                                    value.result === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                                  }`}>
+                                    {value.result}
+                                  </span>
+                                </div>
+                                <p className="text-gray-600">{value.rationale}</p>
+                                <p className="text-sm text-gray-500 mt-2">Criteria ID: {value.criteria_id}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedConversation?.skill_progress && (
+                        <div>
+                          <h3 className="font-semibold mb-4 text-black">Skills Progress</h3>
+                          <div className="grid gap-4">
+                            {selectedConversation.skill_progress.map((skill) => (
+                              <div key={skill.skill_id} className="bg-gray-50 rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-2">
+                                  <h4 className="font-medium text-black">
+                                    Skill {skill.skill_id}
+                                  </h4>
+                                  <span className={`px-2 py-1 text-xs rounded-full ${
+                                    skill.current_level.level === 'developing' 
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    {skill.current_level.level}
+                                  </span>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                  {/* Success Rate */}
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-gray-600">Success Rate</span>
+                                    <span className="font-medium text-black">
+                                      {(skill.current_level.success_rate * 100).toFixed(1)}%
+                                    </span>
+                                  </div>
+
+                                  {/* Practice Sessions */}
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-gray-600">Practice Sessions</span>
+                                    <span className="font-medium text-black">
+                                      {skill.practice_history.session_count}
+                                    </span>
+                                  </div>
+
+                                  {/* Total Practice Time */}
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-gray-600">Total Practice Time</span>
+                                    <span className="font-medium text-black">
+                                      {skill.practice_history.total_minutes.toFixed(1)} minutes
+                                    </span>
+                                  </div>
+
+                                  {/* Success Trend */}
+                                  <div className="mt-4">
+                                    <div className="text-sm text-gray-600 mb-2">Success Trend</div>
+                                    <div className="flex gap-1 h-4">
+                                      {skill.practice_history.success_rate_trend.map((rate, idx) => (
+                                        <div
+                                          key={idx}
+                                          className={`flex-1 rounded ${
+                                            rate > 0 ? 'bg-green-200' : 'bg-gray-200'
+                                          }`}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </TabsContent>
                 </div>
