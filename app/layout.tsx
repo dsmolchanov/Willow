@@ -26,6 +26,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const isPublicRoute = pathname === '/';
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={cn(
@@ -34,11 +37,19 @@ export default function RootLayout({
       )}>
         <ClerkProvider>
           <LanguageProvider>
-            <SupabaseWrapper>
-              {children}
-            </SupabaseWrapper>
+            <WidgetProvider>
+              <NavBar />
+              {isPublicRoute ? (
+                children
+              ) : (
+                <SupabaseWrapper>
+                  {children}
+                </SupabaseWrapper>
+              )}
+            </WidgetProvider>
           </LanguageProvider>
         </ClerkProvider>
+        <Toaster />
       </body>
     </html>
   );
@@ -47,6 +58,7 @@ export default function RootLayout({
 function SupabaseWrapper({ children }: { children: React.ReactNode }) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [supabase, setSupabase] = useState<any>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
