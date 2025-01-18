@@ -1,6 +1,5 @@
 'use client';
 
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import SkillRoadmap from '@/components/SkillRoadmap';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
@@ -8,6 +7,7 @@ import { useUser } from '@clerk/nextjs';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { DashboardRightRail } from '@/components/DashboardRightRail';
+import { useSupabase } from '@/context/SupabaseContext';
 import {
   Sheet,
   SheetContent,
@@ -34,42 +34,9 @@ interface GenerationProgress {
   message: string;
 }
 
-// Helper function to safely parse JSON responses
-async function parseJsonResponse(response: Response): Promise<any> {
-  const responseText = await response.text();
-  
-  // Log the raw response for debugging
-  console.log('Raw response:', responseText);
-  
-  if (!responseText || !responseText.trim()) {
-    throw new Error('Server returned an empty response');
-  }
-  
-  try {
-    return JSON.parse(responseText);
-  } catch (error) {
-    console.error('JSON parsing error:', error);
-    console.error('Response that failed to parse:', responseText);
-    throw new Error(`Failed to parse server response: ${responseText.slice(0, 100)}...`);
-  }
-}
-
-interface DashboardRightRailProps {
-  focusedSkills: Array<{
-    skill_id: number;
-    name: string;
-    priority_level: string;
-  }>;
-  onRemoveSkill: (skillId: number) => void;
-  onStartSession: () => void;
-  isLoading: boolean;
-  selectedVoice: string | null;
-  onVoiceChange: (voiceId: string) => void;
-}
-
 export default function SkillsPage() {
-  const supabase = createClientComponentClient();
-  const { user, isLoaded } = useUser();
+  const { user } = useUser();
+  const supabase = useSupabase();
   
   const [learningPathData, setLearningPathData] = useState<LearningPathData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +74,6 @@ export default function SkillsPage() {
 
         setLearningPathData(pathData);
 
-        // Initialize focused skills with top 5 by score
         if (pathData?.prioritized_skills && pathData?.learning_path) {
           const topPrioritizedSkills = pathData.prioritized_skills
             .sort((a: any, b: any) => b.priority_score - a.priority_score)
@@ -132,7 +98,6 @@ export default function SkillsPage() {
           setFocusedSkills(topSkills);
         }
       } catch (err) {
-        console.error('Error in loadLearningPathData:', err);
         setError('An unexpected error occurred while loading your skills data.');
       }
     };

@@ -13,9 +13,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useEffect, useState, useRef } from "react";
-import { useClerkSupabaseClient } from '@/hooks/useClerkSupabaseClient';
-import { useSession } from '@clerk/nextjs';
-import { useSupabase } from '@/contexts/SupabaseContext';
+import { useUser } from '@clerk/nextjs';
+import { useSupabase } from '@/context/SupabaseContext';
 
 interface Voice {
   voice_id: string;
@@ -47,7 +46,7 @@ export function DashboardRightRail({
   selectedVoice,
   onVoiceChange
 }: DashboardRightRailProps) {
-  const { session } = useSession();
+  const { user } = useUser();
   const supabase = useSupabase();
   const [voices, setVoices] = useState<Voice[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState('ru');
@@ -56,9 +55,7 @@ export function DashboardRightRail({
 
   useEffect(() => {
     const fetchVoices = async () => {
-      if (!session) return;
-
-      console.log('Fetching voices with Clerk session');
+      if (!user) return;
       
       try {
         const { data, error } = await supabase
@@ -67,24 +64,19 @@ export function DashboardRightRail({
           .eq('language', selectedLanguage)
           .eq('is_active', true);
 
-        console.log('Fetched voices:', { data, error });
-
-        if (error) {
-          console.error('Error fetching voices:', error);
-          return;
-        }
+        if (error) throw error;
 
         setVoices(data || []);
         if (!selectedVoice && data && data.length > 0) {
           onVoiceChange(data[0].voice_id);
         }
       } catch (err) {
-        console.error('Unexpected error in fetchVoices:', err);
+        // Handle error silently
       }
     };
 
     fetchVoices();
-  }, [selectedLanguage, supabase, selectedVoice, onVoiceChange, session]);
+  }, [selectedLanguage, supabase, selectedVoice, onVoiceChange, user]);
 
   const handlePlaySample = (voiceId: string, sampleUrl: string) => {
     if (playingAudio === voiceId) {
@@ -101,7 +93,6 @@ export function DashboardRightRail({
     }
   };
 
-  // Cleanup audio on unmount
   useEffect(() => {
     return () => {
       if (audioRef.current) {
@@ -162,40 +153,47 @@ export function DashboardRightRail({
             {voices.map((voice) => (
               <div
                 key={voice.voice_id}
-                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors
+                className={`flex flex-col p-3 rounded-lg border cursor-pointer transition-colors
                   ${selectedVoice === voice.voice_id 
                     ? 'border-primary bg-primary/5' 
                     : 'border-border hover:border-primary/50'}`}
                 onClick={() => onVoiceChange(voice.voice_id)}
               >
-                <div className="flex-shrink-0">
-                  <img 
-                    src={voice.avatar_image_url} 
-                    alt={voice.name}
-                    className="w-10 h-10 rounded-full"
-                  />
-                </div>
-                <div className="flex-grow">
-                  <div className="font-medium">{voice.name}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {voice.gender} • {voice.description}
+                {/* Top row with avatar, name, gender, and play button */}
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="flex-shrink-0">
+                    <img 
+                      src={voice.avatar_image_url} 
+                      alt={voice.name}
+                      className="w-10 h-10 rounded-full"
+                    />
                   </div>
+                  <div className="flex-grow flex items-center gap-2">
+                    <span className="font-medium">{voice.name}</span>
+                    <span className="text-sm text-muted-foreground">•</span>
+                    <span className="text-sm text-muted-foreground">{voice.gender}</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="flex-shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePlaySample(voice.voice_id, voice.audio_sample_url);
+                    }}
+                  >
+                    {playingAudio === voice.voice_id ? (
+                      <Pause className="h-4 w-4" />
+                    ) : (
+                      <Play className="h-4 w-4" />
+                    )}
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="flex-shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePlaySample(voice.voice_id, voice.audio_sample_url);
-                  }}
-                >
-                  {playingAudio === voice.voice_id ? (
-                    <Pause className="h-4 w-4" />
-                  ) : (
-                    <Play className="h-4 w-4" />
-                  )}
-                </Button>
+                
+                {/* Description row */}
+                <div className="text-sm text-muted-foreground">
+                  {voice.description}
+                </div>
               </div>
             ))}
           </div>

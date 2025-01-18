@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react'
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useUser } from "@clerk/nextjs"
+import { useSupabase } from '@/context/SupabaseContext'
+import { useRouter } from 'next/navigation'
 
 interface FocusedSkill {
   skill_id: number;
@@ -18,8 +19,15 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const [focusedSkills, setFocusedSkills] = useState<FocusedSkill[]>([]);
-  const { user } = useUser();
-  const supabase = createClientComponentClient();
+  const { user, isLoaded } = useUser();
+  const supabase = useSupabase();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoaded && !user) {
+      router.push('/sign-in');
+    }
+  }, [isLoaded, user, router]);
 
   useEffect(() => {
     const initializeFocusedSkills = async () => {
@@ -35,12 +43,10 @@ export default function DashboardLayout({
 
       if (!learningPathData?.learning_path || !learningPathData?.prioritized_skills) return;
 
-      // Get the top 5 prioritized skills by score
       const topPrioritizedSkills = learningPathData.prioritized_skills
         .sort((a: any, b: any) => b.priority_score - a.priority_score)
         .slice(0, 5);
 
-      // Find the corresponding learning path entries for these skills
       const topSkills = topPrioritizedSkills
         .map((prioritySkill: any) => {
           const learningPathSkill = learningPathData.learning_path.find(
@@ -81,11 +87,26 @@ export default function DashboardLayout({
     setFocusedSkills(prev => prev.filter(s => s.skill_id !== skillId));
   };
 
-  // Create child props
   const childProps = {
     focusedSkillIds: focusedSkills.map(s => s.skill_id),
     onToggleFocusSkill: handleToggleFocusSkill
   };
+
+  if (!isLoaded) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-pulse text-gray-500">Loading auth state...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-gray-500">Please sign in to access the dashboard</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

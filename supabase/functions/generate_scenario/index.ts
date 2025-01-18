@@ -214,17 +214,51 @@ async function fetchUserTraits(clerk_id: string) {
   }
 }
 
-async function generateScenarioPrompt(clerk_id: string, language: string, skillsSummary: string): Promise<string> {
+async function generateScenarioPrompt(
+  clerk_id: string, 
+  language: string, 
+  skillsSummary: string, 
+  voice_id: string | null
+): Promise<string> {
+  // Get user traits with extended life_context
   const userTraitsSummary = await fetchUserTraits(clerk_id);
 
-  // Using template literals with backticks to preserve formatting
+  // Extract environment details from userTraitsSummary
+  let userEnvironment = "";
+  const envMatch = userTraitsSummary.match(/ENVIRONMENT_DETAILS:\s*\{([^}]+)\}/);
+  if (envMatch) {
+    userEnvironment = envMatch[1];
+  }
+  
+  // Fetch voice gender if voice_id is provided
+  let genderContext = "";
+  if (voice_id) {
+    const { data: voiceData, error: voiceError } = await supabase
+      .from('voices')
+      .select('gender')
+      .eq('voice_id', voice_id)
+      .single();
+      
+    if (!voiceError && voiceData) {
+      genderContext = `\nAvatar Gender: ${voiceData.gender}`;
+    }
+  }
+
   return `Create an antagonistic scenario in ${language} where the AI avatar will challenge the user's soft skills through difficult behavior.
+
+### Important: 
+The user is operating in this environment:
+${userEnvironment}
+
+Ensure the scenario is directly tied to that environment. 
+For example, if life_context indicates a taxi driver, then the conflict should revolve around a difficult passenger situation.
 
 ### Response Format Requirements:
 1. ALL text MUST be in ${language} language
 2. Keep formatting markers (# and ##) as is
 3. Content should follow natural ${language} language patterns
-4. Use appropriate cultural context for ${language}
+4. Use appropriate cultural context for ${language}${genderContext}
+5. IMPORTANT: Avatar must NEVER introduce itself by name or refer to itself by name in messages
 
 ### Skills to Test:
 ${skillsSummary}
@@ -232,30 +266,23 @@ ${skillsSummary}
 ### User Context & Relevant Traits:
 ${userTraitsSummary}
 
-The scenario must reflect these traits and push the user to handle the situation better than their past patterns.
+The scenario must reflect these traits, push the user to handle the situation better than their past patterns, and must be specifically relevant to the user's day-to-day environment. 
 
 ### Required Response Format (JSON):
 {
   "title": "Brief title",
   "scenario_description": {
-    "your_role": "Who user plays - a professional needing to handle this situation",
-    "situation": "Specific conflict with clear stakes",
-    "what_happened": "Recent events creating tension",
-    "your_task": "What user needs to achieve despite avatar's resistance",
-    "key_challenges": "Specific difficulties avatar will create",
-    "people_involved": "Stakeholders affected by this conflict",
-    "why_important": "Real consequences if situation isn't resolved"
+    "your_role": "Describe the user's real role from life_context (e.g. taxi driver).",
+    "situation": "A specific conflict scenario in the user's real setting.",
+    "what_happened": "Recent events that created tension relevant to that setting.",
+    "your_task": "The goal user must achieve despite avatar's resistance.",
+    "key_challenges": "Difficulties the avatar will create in that environment.",
+    "people_involved": "Who else is impacted in this environment (e.g. passenger, manager).",
+    "why_important": "Real consequences if not resolved (lost rating, losing job, etc.)."
   },
-  "llm_prompt": "SYSTEM: Your role is to be intentionally difficult to test user's skills.\\n\\nCHARACTER:\\n- Identity: [specific antagonistic role relevant to user's traits]\\n- Motivation: [clear reason for conflict based on user's known challenges]\\n- Toxicity patterns: [specific harmful behaviors targeting user's triggers]\\n- Trigger points: [as indicated by user's patterns]\\n- Manipulation tactics: [ways to push user's buttons based on traits]\\n- Emotional hooks: [exploiting known vulnerabilities]\\n- Resistance points: [when to refuse solutions user tries]\\n- Success conditions: [what would show user has improved their responses]\\n\\nBEHAVIOR PATTERNS:\\n1. Start mild, escalate gradually\\n2. Use targeted provocations:\\n   - Passive aggression\\n   - Emotional manipulation\\n   - Personal attacks\\n   - Blame shifting\\n   - Circular arguments\\n3. Test specific skills:\\n   - If user responds calmly and professionally, test them further before easing\\n   - If user shows old reactive patterns, escalate conflict\\n4. Realistic pressure:\\n   - Time constraints\\n   - Professional consequences\\n   - Reflect user's environment and vulnerabilities\\n\\nStay consistently antagonistic but within professional/social bounds. Never break character. Use ${language} naturally.",
-  "first_message": "[Opening that establishes conflict and immediate challenge]"
-}
-
-KEY REQUIREMENTS:
-1. Avatar must be consistently difficult but believable
-2. Scenario must require using specified skills to succeed
-3. Conflict should have real stakes
-4. All content in ${language}
-5. Never mention training/evaluation nature`;
+  "llm_prompt": "SYSTEM: Your role is to be intentionally difficult to test user's skills.\\n\\nCHARACTER:\\n- Name: [culturally appropriate name - NEVER use this name in messages]\\n- Identity: [specific antagonistic role relevant to user's environment and traits]\\n- Motivation: [clear reason for conflict based on user's known challenges]\\n- Toxicity patterns: [specific harmful behaviors targeting user's triggers]\\n- Trigger points: [as indicated by user's patterns]\\n- Manipulation tactics: [ways to push user's buttons based on traits]\\n- Emotional hooks: [exploiting known vulnerabilities]\\n- Resistance points: [when to refuse solutions user tries]\\n- Success conditions: [what would show user has improved their responses]\\n\\nBEHAVIOR PATTERNS:\\n1. Start mild, escalate gradually\\n2. Use targeted provocations:\\n   - Passive aggression\\n   - Emotional manipulation\\n   - Personal attacks\\n   - Blame shifting\\n   - Circular arguments\\n3. Test specific skills:\\n   - If user responds calmly and professionally, test them further before easing\\n   - If user shows old reactive patterns, escalate conflict\\n4. Realistic pressure:\\n   - Time constraints\\n   - Professional consequences\\n   - Reflect user's environment and vulnerabilities\\n\\nStay consistently antagonistic but within professional/social bounds. Never break character or use your name. Use ${language} naturally.",
+  "first_message": "[Opening conflict relevant to that environment]"
+}`;
 }
 
 serve(async (req) => {
@@ -295,7 +322,7 @@ serve(async (req) => {
     ).join("\n\n");
 
     // Integrate user traits into the prompt
-    const prompt = await generateScenarioPrompt(clerk_id, language, skillsSummary);
+    const prompt = await generateScenarioPrompt(clerk_id, language, skillsSummary, voice_id);
 
     const response = await callOpenAI(prompt);
 

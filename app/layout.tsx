@@ -1,8 +1,7 @@
 // app/layout.tsx
 "use client";
 
-import { Suspense } from "react";
-import { ClerkProvider } from "@clerk/nextjs";
+import { ClerkProvider, useAuth } from "@clerk/nextjs";
 import "./globals.css";
 import { Poppins } from 'next/font/google'
 import { BackgroundGradientAnimation } from "@/components/ui/background-gradient-animation";
@@ -11,41 +10,16 @@ import { LanguageProvider } from "@/context/LanguageContext";
 import { WidgetProvider } from "@/context/WidgetContext";
 import { usePathname } from 'next/navigation';
 import { Toaster } from 'sonner';
-import { SupabaseProvider } from '@/contexts/SupabaseContext';
+import { SupabaseProvider } from '@/context/SupabaseContext';
+import { getSupabaseClient } from '@/lib/supabase';
+import { useEffect, useMemo, useState } from 'react';
+import { cn } from "@/lib/utils";
 
 const poppins = Poppins({ 
   subsets: ['latin'],
-  weight: ['400', '500', '700']
+  weight: ['400', '500', '700'],
+  variable: '--font-poppins',
 })
-
-function LayoutContent({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const isDashboard = pathname?.startsWith('/dashboard');
-  const isHomePage = pathname === '/';
-  const isBuddhaPage = pathname === '/buddha';
-  const isCookingPage = pathname === '/cooking';
-
-  return (
-    <div className={`${poppins.className} relative min-h-screen`}>
-      <LanguageProvider>
-        <WidgetProvider>
-          {!isDashboard && !isHomePage && !isBuddhaPage && !isCookingPage && (
-            <div className="fixed inset-0 z-0">
-              <BackgroundGradientAnimation />
-            </div>
-          )}
-          <div className="relative z-10 min-h-screen overflow-auto">
-            {!isDashboard && !isBuddhaPage && !isCookingPage && <NavBar />}
-            <main className={!isDashboard && !isHomePage && !isBuddhaPage && !isCookingPage ? "pt-20" : undefined}>
-              {children}
-            </main>
-          </div>
-          <Toaster />
-        </WidgetProvider>
-      </LanguageProvider>
-    </div>
-  );
-}
 
 export default function RootLayout({
   children,
@@ -53,16 +27,93 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider>
-      <SupabaseProvider>
-        <html lang="en">
-          <body>
-            <Suspense fallback={<div>Loading...</div>}>
-              <LayoutContent>{children}</LayoutContent>
-            </Suspense>
-          </body>
-        </html>
-      </SupabaseProvider>
-    </ClerkProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className={cn(
+        "min-h-screen font-sans antialiased",
+        poppins.variable
+      )}>
+        <ClerkProvider>
+          <LanguageProvider>
+            <SupabaseWrapper>
+              {children}
+            </SupabaseWrapper>
+          </LanguageProvider>
+        </ClerkProvider>
+      </body>
+    </html>
+  );
+}
+
+function SupabaseWrapper({ children }: { children: React.ReactNode }) {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const [supabase, setSupabase] = useState<any>(null);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+
+    const setupSupabase = async () => {
+      const fetchCallback = async (url: string, options = {}) => {
+        try {
+          const token = await getToken({
+            template: 'supabaseWillow'
+          });
+
+          if (!token) {
+            throw new Error('Failed to get Supabase token');
+          }
+
+          const headers = new Headers(options?.headers);
+          headers.set('Authorization', `Bearer ${token}`);
+
+          return fetch(url, {
+            ...options,
+            headers,
+          });
+        } catch (error) {
+          throw new Error('Failed to authenticate request');
+        }
+      };
+
+      const client = getSupabaseClient(fetchCallback);
+      setSupabase(client);
+    };
+
+    setupSupabase();
+  }, [getToken, isLoaded, isSignedIn]);
+
+  if (!isLoaded) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-pulse text-gray-500">
+          Loading authentication...
+        </div>
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-gray-500">
+          Please sign in to continue
+        </div>
+      </div>
+    );
+  }
+
+  if (!supabase) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-pulse text-gray-500">
+          Setting up database connection...
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <SupabaseProvider supabase={supabase}>
+      {children}
+    </SupabaseProvider>
   );
 }

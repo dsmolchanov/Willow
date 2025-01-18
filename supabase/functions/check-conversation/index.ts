@@ -8,15 +8,39 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
 // Retry configuration for handling API delays
 const RETRY_CONFIG = {
-  maxRetries: 5,         // Maximum retry attempts
-  initialDelay: 2000,    // Start with 2 seconds
-  maxDelay: 10000,       // Maximum 10 seconds delay
-  backoffFactor: 1.5     // Increase delay by 50% each retry
+  maxRetries: 3,
+  initialDelay: 30000,    // Start with 30 seconds
+  maxDelay: 30000,        // Keep consistent 30-second delay
+  backoffFactor: 1        // No backoff, keep consistent delay
 }
 
 // Interface for the simplified request
 interface ConversationRequest {
   conversation_id: number;
+}
+
+// Add type definitions to match the database schema
+type CallStatus = 'unknown' | 'pending' | 'fetching' | 'processed' | 'fetch_failed';
+
+interface UserConversation {
+  conversation_id: number;
+  clerk_id?: string;
+  agent_id: string;
+  elevenlabs_conversation_id?: string;
+  start_time?: string;
+  end_time?: string;
+  status: CallStatus;
+  transcript?: any[];
+  metadata?: Record<string, any>;
+  analysis?: Record<string, any>;
+  data_collection_results?: Record<string, any>;
+  duration?: number;
+  replics_number?: number;
+  scenario_info?: {
+    scenario_id: string | null;
+    title: string | null;
+    skill_ids: string[];
+  };
 }
 
 // Utility function for delay with exponential backoff
@@ -43,7 +67,6 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
   
   try {
-    // Parse the request to get the conversation ID
     const { conversation_id } = await req.json() as ConversationRequest;
     console.log('Processing conversation:', conversation_id);
 
@@ -51,25 +74,48 @@ serve(async (req) => {
       throw new Error('No conversation ID provided');
     }
 
-    // First, get the elevenlabs_conversation_id from the database
+    // Get the conversation data and update initial status
     const { data: conversationData, error: fetchError } = await supabase
       .from('user_conversations')
-      .select('elevenlabs_conversation_id')
+      .select('elevenlabs_conversation_id, status')
       .eq('conversation_id', conversation_id)
       .single();
 
-    if (fetchError || !conversationData?.elevenlabs_conversation_id) {
-      throw new Error('Could not find ElevenLabs conversation ID');
+    if (fetchError) {
+      throw new Error(`Database fetch error: ${fetchError.message}`);
     }
 
-    // Update status to indicate processing has started
-    await supabase
-      .from('user_conversations')
-      .update({ status: 'fetching' })
-      .eq('conversation_id', conversation_id);
+    if (!conversationData?.elevenlabs_conversation_id) {
+      throw new Error('ElevenLabs conversation ID not found');
+    }
 
-    // Attempt to fetch the data from ElevenLabs with retries
-    let lastError;
+    // If status is already 'processed', return early
+    if (conversationData.status === 'processed') {
+      return new Response(
+        JSON.stringify({ 
+          message: 'Conversation already processed',
+          conversation_id
+        }),
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Update status to fetching if not already
+    if (conversationData.status !== 'fetching') {
+      await supabase
+        .from('user_conversations')
+        .update({ 
+          status: 'fetching',
+          metadata: {
+            ...conversationData.metadata,
+            fetch_attempts: 0,
+            last_attempt: getTimestampWithTimezone()
+          }
+        })
+        .eq('conversation_id', conversation_id);
+    }
+
+    let lastError: Error | null = null;
     for (let attempt = 0; attempt < RETRY_CONFIG.maxRetries; attempt++) {
       try {
         console.log(`Attempt ${attempt + 1} to fetch conversation data`);
@@ -82,74 +128,190 @@ serve(async (req) => {
           }
         );
 
+        const responseText = await response.text();
+        console.log(`ElevenLabs API Response (Attempt ${attempt + 1}):`, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          body: responseText
+        });
+
+        let responseData;
+        try {
+          responseData = JSON.parse(responseText);
+        } catch (e) {
+          console.log('Failed to parse response as JSON:', e);
+        }
+
         if (response.status === 404) {
-          console.log(`Data not yet available (attempt ${attempt + 1})`);
+          console.log(`Data not yet available (attempt ${attempt + 1}). Will retry in ${RETRY_CONFIG.initialDelay/1000} seconds`);
+          
+          // Update metadata with attempt information
+          await supabase
+            .from('user_conversations')
+            .update({
+              metadata: {
+                ...conversationData.metadata,
+                fetch_attempts: attempt + 1,
+                last_attempt: getTimestampWithTimezone(),
+                last_response: {
+                  status: response.status,
+                  body: responseText,
+                  timestamp: new Date().toISOString()
+                }
+              }
+            })
+            .eq('conversation_id', conversation_id);
+
           await delay(attempt);
           continue;
         }
 
         if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
+          throw new Error(`API error: ${response.status} - ${responseText}`);
         }
 
-        const data = await response.json();
-        
-        // Calculate metrics from the response
-        const replicsNumber = Array.isArray(data.transcript) ? data.transcript.length : 0;
-        const duration = data.metadata?.call_duration_secs || 0;
+        const data = responseData;
+        console.log('Validating response data structure:', {
+          hasTranscript: Array.isArray(data.transcript),
+          hasAnalysis: typeof data.analysis === 'object',
+          hasMetadata: typeof data.metadata === 'object'
+        });
 
-        // Update the conversation with the fetched data
-        const { error: updateError } = await supabase
+        // Validate required data structure
+        if (!Array.isArray(data.transcript)) {
+          throw new Error('Invalid response: transcript must be an array');
+        }
+        if (!data.analysis || typeof data.analysis !== 'object') {
+          throw new Error('Invalid response: analysis must be an object');
+        }
+        if (!data.metadata || typeof data.metadata !== 'object') {
+          throw new Error('Invalid response: metadata must be an object');
+        }
+
+        // Prepare update data with strict typing
+        const updateData: Partial<UserConversation> = {
+          transcript: data.transcript,
+          metadata: {
+            ...data.metadata,
+            fetch_attempts: attempt + 1,
+            last_successful_fetch: getTimestampWithTimezone(),
+            api_response_history: [
+              ...(conversationData.metadata?.api_response_history || []),
+              {
+                attempt: attempt + 1,
+                timestamp: new Date().toISOString(),
+                status: response.status,
+                success: true
+              }
+            ]
+          },
+          analysis: data.analysis,
+          data_collection_results: data.analysis.data_collection_results || {},
+          replics_number: data.transcript.length,
+          duration: data.metadata?.call_duration_secs || 0,
+          status: 'processed' as CallStatus
+        };
+
+        console.log('Update payload validation:', {
+          conversation_id,
+          payloadSize: JSON.stringify(updateData).length,
+          hasRequiredFields: {
+            transcript: !!updateData.transcript,
+            analysis: !!updateData.analysis,
+            status: updateData.status === 'processed'
+          }
+        });
+
+        // Attempt the update with detailed error handling
+        const { data: updatedData, error: updateError } = await supabase
           .from('user_conversations')
-          .update({
-            transcript: data.transcript,
-            metadata: data.metadata,
-            analysis: data.analysis,
-            data_collection_results: data.analysis.data_collection_results,
-            replics_number: replicsNumber,
-            duration: duration,
-            status: 'processed'
-          })
-          .eq('conversation_id', conversation_id);
+          .update(updateData)
+          .eq('conversation_id', conversation_id)
+          .select()
+          .single();
 
         if (updateError) {
+          console.error('Database update failed:', {
+            error: updateError,
+            errorCode: updateError.code,
+            errorMessage: updateError.message,
+            errorDetails: updateError.details,
+            conversation_id,
+            updatePayload: updateData
+          });
           throw new Error(`Database update failed: ${updateError.message}`);
         }
+
+        console.log('Database update successful:', {
+          conversation_id,
+          newStatus: updatedData?.status,
+          updateTime: new Date().toISOString()
+        });
 
         return new Response(
           JSON.stringify({ 
             message: 'Conversation processed successfully',
-            conversation_id
+            conversation_id,
+            attempts: attempt + 1,
+            processingTime: {
+              attempts: attempt + 1,
+              totalSeconds: (attempt + 1) * RETRY_CONFIG.initialDelay / 1000
+            }
           }),
           { headers: { 'Content-Type': 'application/json' } }
         );
 
       } catch (error) {
-        lastError = error;
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.error(`Attempt ${attempt + 1} failed:`, {
+          error: lastError.message,
+          stack: lastError.stack,
+          conversation_id,
+          timestamp: new Date().toISOString()
+        });
+        
         if (attempt < RETRY_CONFIG.maxRetries - 1) {
           await delay(attempt);
         }
       }
     }
 
-    // If all retries failed, update the status and throw the error
-    await supabase
+    // Update status to pending if all retries failed
+    const { error: finalStatusError } = await supabase
       .from('user_conversations')
       .update({
-        status: 'fetch_failed',
+        status: 'pending' as CallStatus,
         metadata: {
-          error: lastError?.message,
-          last_attempt: getTimestampWithTimezone()
+          ...conversationData.metadata,
+          fetch_attempts: RETRY_CONFIG.maxRetries,
+          last_attempt: getTimestampWithTimezone(),
+          error: lastError?.message || 'Data not yet available'
         }
       })
       .eq('conversation_id', conversation_id);
 
-    throw lastError;
+    if (finalStatusError) {
+      console.error('Failed to update final status:', finalStatusError);
+    }
+
+    return new Response(
+      JSON.stringify({ 
+        message: 'Conversation processing pending, please retry later',
+        conversation_id,
+        attempts: RETRY_CONFIG.maxRetries
+      }),
+      { status: 202, headers: { 'Content-Type': 'application/json' } }
+    );
 
   } catch (err) {
-    console.error('Error in Edge Function:', err);
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+    console.error('Error in Edge Function:', {
+      error: errorMessage,
+      timestamp: new Date().toISOString()
+    });
     return new Response(
-      JSON.stringify({ error: err.message }),
+      JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

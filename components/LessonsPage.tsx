@@ -1,6 +1,5 @@
 "use client";
 
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -9,6 +8,8 @@ import { useUser } from '@clerk/nextjs';
 import { useEffect, useState } from 'react';
 import Markdown from 'react-markdown';
 import { ElevenLabsWidget } from './ElevenLabsWidget';
+import { useSupabase } from '@/context/SupabaseContext';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 interface Skill {
   skill_id: number;
@@ -54,8 +55,8 @@ function formatDate(date: string) {
 }
 
 export default function LessonsPage() {
-  const supabase = createClientComponentClient();
-  const { user } = useUser();
+  const { user, isLoaded } = useUser();
+  const supabase = useSupabase();
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -175,11 +176,12 @@ export default function LessonsPage() {
 
   // Function to load scenarios
   const loadScenarios = async () => {
-    if (!user) return;
-    
+    if (!user?.id) return;
+
     try {
       setIsLoading(true);
-      const { data, error: scenariosError } = await supabase
+
+      const { data, error } = await supabase
         .from('scenarios')
         .select(`
           scenario_id,
@@ -197,57 +199,28 @@ export default function LessonsPage() {
         .eq('clerk_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (scenariosError) {
-        console.error('Error loading scenarios:', scenariosError);
-        setError('Error loading scenarios. Please try again later.');
+      if (error) {
+        setError(error.message);
         return;
       }
 
-      // Consider scenarios with agent_id but pending status as completed
-      const validScenarios = data?.filter(s => s && s.scenario_id !== null && s.scenario_id !== undefined)
-        .map(s => ({
-          ...s,
-          agent_status: (s.agent_id && s.agent_status === 'pending') ? 'completed' : s.agent_status
-        })) || [];
+      setScenarios(data || []);
 
-      setScenarios(validScenarios);
     } catch (err) {
-      console.error('Error in loadScenarios:', err);
-      setError('An unexpected error occurred while loading your scenarios.');
+      setError('An unexpected error occurred while loading scenarios');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Initial load and subscription setup
   useEffect(() => {
-    if (!user) return;
+    if (!isLoaded || !user) {
+      setIsLoading(false);
+      return;
+    }
 
-    // Initial load
     loadScenarios();
-
-    // Set up real-time subscription
-    const channel = supabase
-      .channel('scenarios_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'scenarios',
-          filter: `clerk_id=eq.${user.id}`
-        },
-        () => {
-          loadScenarios(); // Reload data when changes occur
-        }
-      )
-      .subscribe();
-
-    // Cleanup subscription
-    return () => {
-      channel.unsubscribe();
-    };
-  }, [user, supabase]);
+  }, [user, isLoaded]);
 
   // Load skills when a scenario is selected
   useEffect(() => {
@@ -274,6 +247,22 @@ export default function LessonsPage() {
 
     loadSkills();
   }, [selectedScenario, supabase]);
+
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse">Loading user data...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div>Please sign in to view lessons</div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

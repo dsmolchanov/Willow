@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { useUser } from "@clerk/nextjs"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { MessageCircle, Clock, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useSupabase } from '@/context/SupabaseContext';
 
 interface Message {
   role: string;
@@ -30,6 +30,12 @@ interface Analysis {
   evaluation_criteria_results: any;
 }
 
+interface ScenarioInfo {
+  title: string;
+  skill_ids: number[];
+  scenario_id: number;
+}
+
 interface Conversation {
   conversation_id: number;
   clerk_id: string;
@@ -42,7 +48,7 @@ interface Conversation {
   replics_number: number;
   transcript: Message[];
   analysis: Analysis;
-  scenario_title?: string;
+  scenario_info: ScenarioInfo;
 }
 
 interface SkillProgress {
@@ -93,45 +99,31 @@ export default function ConversationsPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedConversation, setSelectedConversation] = useState<ConversationDetails | null>(null);
-  const supabase = createClientComponentClient();
+  const supabase = useSupabase();
 
   // Function to fetch conversations
   const fetchConversations = async () => {
     if (!user) return;
 
     try {
-      console.log('Fetching conversations for clerk_id:', user.id);
       setIsLoading(true);
       
-      // Get conversations
       const { data: conversationsData, error: conversationsError } = await supabase
         .from('user_conversations')
         .select(`
           *,
-          metadata
+          scenario_info
         `)
         .eq('clerk_id', user.id)
         .order('start_time', { ascending: false });
 
       if (conversationsError) {
-        console.error('Error fetching conversations:', conversationsError);
-        return;
+        throw conversationsError;
       }
 
-      // Transform conversations data
-      const conversationsWithTitles = conversationsData.map(conv => ({
-        ...conv,
-        // Try to get title from metadata if available, otherwise use default
-        scenario_title: conv.metadata?.scenario_title || 
-                       conv.metadata?.title || 
-                       `Conversation ${new Date(conv.start_time).toLocaleDateString()}`
-      }));
-
-      console.log('Processed conversations:', conversationsWithTitles);
-      
-      setConversations(conversationsWithTitles);
+      setConversations(conversationsData);
     } catch (error) {
-      console.error('Error fetching conversations:', error);
+      // Handle error silently or show a user-friendly message
     } finally {
       setIsLoading(false);
     }
@@ -151,11 +143,10 @@ export default function ConversationsPage() {
         skill_progress: skillProgress
       });
     } catch (error) {
-      console.error('Error fetching conversation details:', error);
+      // Handle error silently or show a user-friendly message
     }
   };
 
-  // Update click handler
   const handleConversationClick = (conversation: Conversation) => {
     fetchConversationDetails(conversation);
   };
@@ -177,14 +168,11 @@ export default function ConversationsPage() {
           table: 'user_conversations',
           filter: `clerk_id=eq.${user.id}`
         },
-        (payload) => {
-          console.log('Received real-time update:', payload);
+        () => {
           fetchConversations(); // Reload data when changes occur
         }
       )
-      .subscribe((status) => {
-        console.log('Subscription status:', status);
-      });
+      .subscribe();
 
     // Cleanup subscription
     return () => {
@@ -218,7 +206,7 @@ export default function ConversationsPage() {
                 <MessageCircle className="w-5 h-5 text-gray-400" />
                 <div>
                   <h3 className="font-medium text-gray-900">
-                    {conversation.scenario_title || 'Untitled Conversation'}
+                    {conversation.scenario_info?.title || 'Untitled Conversation'}
                   </h3>
                   <p className="text-sm text-gray-500">
                     {formatTime(conversation.start_time)}
