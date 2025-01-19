@@ -1,7 +1,7 @@
 // app/layout.tsx
 "use client";
 
-import { ClerkProvider, useAuth } from "@clerk/nextjs";
+import { ClerkProvider, useAuth, SignIn } from "@clerk/nextjs";
 import "./globals.css";
 import { Poppins } from 'next/font/google'
 import { BackgroundGradientAnimation } from "@/components/ui/background-gradient-animation";
@@ -106,9 +106,16 @@ function SupabaseWrapper({ children }: { children: React.ReactNode }) {
   if (!isSignedIn) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-gray-500">
-          Please sign in to continue
-        </div>
+        <SignIn 
+          appearance={{
+            elements: {
+              rootBox: "mx-auto",
+              card: "rounded-xl shadow-lg",
+              headerTitle: "text-2xl font-bold",
+              headerSubtitle: "text-gray-600"
+            }
+          }}
+        />
       </div>
     );
   }
