@@ -1,7 +1,7 @@
 // app/layout.tsx
 "use client";
 
-import { ClerkProvider, useAuth, SignIn } from "@clerk/nextjs";
+import { ClerkProvider, useAuth, SignIn, SignUp } from "@clerk/nextjs";
 import "./globals.css";
 import { Poppins } from 'next/font/google'
 import { BackgroundGradientAnimation } from "@/components/ui/background-gradient-animation";
@@ -27,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const isPublicRoute = pathname === '/';
+  const isPublicRoute = pathname === '/' || pathname === '/sign-in' || pathname === '/sign-up';
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -40,7 +40,9 @@ export default function RootLayout({
             <WidgetProvider>
               <NavBar />
               {isPublicRoute ? (
-                children
+                <AuthWrapper pathname={pathname}>
+                  {children}
+                </AuthWrapper>
               ) : (
                 <SupabaseWrapper>
                   {children}
@@ -53,6 +55,44 @@ export default function RootLayout({
       </body>
     </html>
   );
+}
+
+function AuthWrapper({ children, pathname }: { children: React.ReactNode, pathname: string }) {
+  if (pathname === '/sign-in') {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <SignIn 
+          appearance={{
+            elements: {
+              rootBox: "mx-auto",
+              card: "rounded-xl shadow-lg",
+              headerTitle: "text-2xl font-bold",
+              headerSubtitle: "text-gray-600"
+            }
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (pathname === '/sign-up') {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <SignUp 
+          appearance={{
+            elements: {
+              rootBox: "mx-auto",
+              card: "rounded-xl shadow-lg",
+              headerTitle: "text-2xl font-bold",
+              headerSubtitle: "text-gray-600"
+            }
+          }}
+        />
+      </div>
+    );
+  }
+
+  return children;
 }
 
 function SupabaseWrapper({ children }: { children: React.ReactNode }) {
