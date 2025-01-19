@@ -27,7 +27,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const isPublicRoute = pathname === '/' || pathname === '/sign-in' || pathname === '/sign-up';
+  const isPublicRoute = pathname === '/' || 
+    pathname.startsWith('/sign-in') || 
+    pathname.startsWith('/sign-up') || 
+    pathname.startsWith('/verify-email');
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -58,41 +61,38 @@ export default function RootLayout({
 }
 
 function AuthWrapper({ children, pathname }: { children: React.ReactNode, pathname: string }) {
-  if (pathname === '/sign-in') {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <SignIn 
-          appearance={{
-            elements: {
-              rootBox: "mx-auto",
-              card: "rounded-xl shadow-lg",
-              headerTitle: "text-2xl font-bold",
-              headerSubtitle: "text-gray-600"
-            }
-          }}
-        />
-      </div>
-    );
-  }
+  const commonAppearance = {
+    elements: {
+      rootBox: "mx-auto",
+      card: "rounded-xl shadow-lg",
+      headerTitle: "text-2xl font-bold",
+      headerSubtitle: "text-gray-600",
+      formButtonPrimary: "bg-primary hover:bg-primary/90",
+      socialButtonsBlockButton: "border border-gray-200 hover:bg-gray-50",
+      formFieldInput: "border-gray-200 focus:border-primary",
+      dividerLine: "bg-gray-200",
+      dividerText: "text-gray-500",
+      footer: "text-gray-500"
+    }
+  };
 
-  if (pathname === '/sign-up') {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <SignUp 
-          appearance={{
-            elements: {
-              rootBox: "mx-auto",
-              card: "rounded-xl shadow-lg",
-              headerTitle: "text-2xl font-bold",
-              headerSubtitle: "text-gray-600"
-            }
-          }}
-        />
-      </div>
-    );
-  }
+  const renderAuthComponent = () => {
+    if (pathname.startsWith('/sign-in')) {
+      return <SignIn appearance={commonAppearance} />;
+    }
+    
+    if (pathname.startsWith('/sign-up')) {
+      return <SignUp appearance={commonAppearance} />;
+    }
 
-  return children;
+    return children;
+  };
+
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      {renderAuthComponent()}
+    </div>
+  );
 }
 
 function SupabaseWrapper({ children }: { children: React.ReactNode }) {
