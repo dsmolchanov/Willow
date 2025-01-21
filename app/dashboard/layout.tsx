@@ -109,20 +109,24 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarProvider>
-        <AppSidebar />
-        <main className="flex p-4 sm:ml-64">
-          <div className="flex-1">
-            <div className="mb-4 sm:hidden">
-              <SidebarTrigger />
-            </div>
-            {React.isValidElement(children) 
-              ? React.cloneElement(children, childProps)
-              : children}
-          </div>
-        </main>
-      </SidebarProvider>
+    <div className="flex flex-col min-h-screen">
+      <div className="flex-1">
+        <div className="bg-background">
+          <SidebarProvider>
+            <AppSidebar />
+            <main className="flex p-4 sm:ml-64">
+              <div className="flex-1">
+                <div className="mb-4 sm:hidden">
+                  <SidebarTrigger />
+                </div>
+                {React.isValidElement(children) 
+                  ? React.cloneElement(children, childProps)
+                  : children}
+              </div>
+            </main>
+          </SidebarProvider>
+        </div>
+      </div>
     </div>
   )
 } 
