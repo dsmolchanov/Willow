@@ -7,6 +7,7 @@ import dynamic from 'next/dynamic';
 import { ElevenLabsWidget } from "@/components/ElevenLabsWidget";
 import { BackgroundGradientAnimation } from "@/components/ui/background-gradient-animation";
 import { useLanguage } from '@/context/LanguageContext';
+import { translations } from '@/translations';
 import Footer from "@/components/Footer";
 
 const HeroSection = dynamic(() => import("@/components/HeroSection"), { ssr: false });
@@ -20,9 +21,7 @@ export default function HomePage() {
   const router = useRouter();
   const { language } = useLanguage();
   
-  const agentId = language === 'ru' 
-    ? "doXNIsa8qmit1NjLQxgT"
-    : "cxRQ5scm1qhlOVdadUFp";
+  const { id: agentId, title, scenario_id, skill_ids } = translations[language].agent;
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
@@ -55,7 +54,14 @@ export default function HomePage() {
       <Footer />
 
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
-        <ElevenLabsWidget agentId={agentId} />
+        <ElevenLabsWidget 
+          agentId={agentId} 
+          scenarioInfo={{
+            title,
+            scenario_id,
+            skill_ids: [...skill_ids]
+          }}
+        />
       </div>
     </>
   );

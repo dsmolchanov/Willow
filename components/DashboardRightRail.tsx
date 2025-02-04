@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useEffect, useState, useRef } from "react";
-import { useUser } from '@clerk/nextjs';
+import { useUser, useSession } from '@clerk/nextjs';
 import { useSupabase } from '@/context/SupabaseContext';
 
 interface Voice {
@@ -47,6 +47,7 @@ export function DashboardRightRail({
   onVoiceChange
 }: DashboardRightRailProps) {
   const { user } = useUser();
+  const { session } = useSession();
   const supabase = useSupabase();
   const [voices, setVoices] = useState<Voice[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState('ru');
@@ -55,28 +56,85 @@ export function DashboardRightRail({
 
   useEffect(() => {
     const fetchVoices = async () => {
-      if (!user) return;
-      
+      if (!user || !session) {
+        console.log('No user or session found, skipping voice fetch');
+        return;
+      }
+
       try {
+        // Get the session token with supabaseWillow template
+        const token = await session.getToken({ template: 'supabaseWillow' });
+        // Log a masked version of the token for debugging
+        console.log('Token (first 10 chars):', token ? token.substring(0, 10) + '...' : 'null');
+
+        if (!token) {
+          console.error('No Willow token available');
+          return;
+        }
+
+        // Log the query parameters
+        console.log('Query params:', {
+          language: selectedLanguage
+        });
+
+        // First, try to get all voices without language filter
+        const allVoicesQuery = await supabase
+          .from('voices')
+          .select('*');
+        
+        console.log('All voices query response:', {
+          hasData: !!allVoicesQuery.data,
+          dataLength: allVoicesQuery.data?.length || 0,
+          error: allVoicesQuery.error,
+          data: allVoicesQuery.data
+        });
+
+        // Make the request with just the language filter
+        // RLS policy will handle the is_active check
         const { data, error } = await supabase
           .from('voices')
           .select('*')
-          .eq('language', selectedLanguage)
-          .eq('is_active', true);
+          .eq('language', selectedLanguage);
+          
+        if (error) {
+          console.error('Error fetching voices:', error);
+          throw error;
+        }
 
-        if (error) throw error;
+        // Log more details about the response
+        console.log('Final filtered response:', {
+          hasData: !!data,
+          dataLength: data?.length || 0,
+          isArray: Array.isArray(data),
+          data: data
+        });
 
-        setVoices(data || []);
-        if (!selectedVoice && data && data.length > 0) {
-          onVoiceChange(data[0].voice_id);
+        if (data) {
+          console.log(`Successfully fetched ${data.length} voices for language ${selectedLanguage}`);
+          setVoices(data);
+          if (!selectedVoice && data.length > 0) {
+            console.log('Setting default voice:', data[0].voice_id);
+            onVoiceChange(data[0].voice_id);
+          }
         }
       } catch (err) {
-        // Handle error silently
+        console.error('Failed to fetch voices:', err);
+        if (err instanceof Error) {
+          console.error('Error details:', err.message);
+          console.error('Error stack:', err.stack);
+        }
       }
     };
 
+    console.log('Effect triggered with:', {
+      selectedLanguage,
+      hasUser: !!user,
+      hasSession: !!session,
+      selectedVoice
+    });
+
     fetchVoices();
-  }, [selectedLanguage, supabase, selectedVoice, onVoiceChange, user]);
+  }, [selectedLanguage, selectedVoice, onVoiceChange, user, session, supabase]);
 
   const handlePlaySample = (voiceId: string, sampleUrl: string) => {
     if (playingAudio === voiceId) {

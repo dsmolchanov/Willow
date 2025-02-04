@@ -1,5 +1,11 @@
 export const translations = {
     en: {
+      agent: {
+        id: "cxRQ5scm1qhlOVdadUFp",
+        title: "Onboarding",
+        scenario_id: 1,
+        skill_ids: [1, 2, 3]  // Default skill IDs for onboarding
+      },
       hero: {
         title: "Master Your Soft Skills",
         subtitle: "Practice and improve your communication skills with our",
@@ -204,6 +210,12 @@ export const translations = {
       }
     },
     ru: {
+      agent: {
+        id: "doXNIsa8qmit1NjLQxgT",
+        title: "Вводное интервью",
+        scenario_id: 2,
+        skill_ids: [1, 2, 3]  // Default skill IDs for intro interview
+      },
       hero: {
         title: "Развивайте Навыки Общения",
         subtitle: "Практикуйте и улучшайте навыки коммуникации с помощью",

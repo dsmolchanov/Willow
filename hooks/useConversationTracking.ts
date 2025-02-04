@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useUser } from '@clerk/nextjs';
+import { useSupabase } from '@/context/SupabaseContext';
 import type { Message } from '@/types';
 
 // Define the enum to match the database
@@ -22,7 +22,7 @@ interface PendingConversation {
 }
 
 export function useConversationTracking() {
-  const supabase = createClientComponentClient();
+  const supabase = useSupabase();
   const { user } = useUser();
   const [pendingConversation, setPendingConversation] = useState<PendingConversation | null>(null);
 
@@ -134,10 +134,50 @@ export function useConversationTracking() {
     }
   }, [user, pendingConversation, startTracking, endTracking]);
 
+  const createConversationRecord = useCallback(async (clerkId: string, data: {
+    elevenLabsConversationId: string;
+    agentId: string;
+    startTime: string;
+    endTime: string;
+    transcript?: Message[];
+    analysis?: any;
+    scenarioInfo?: {
+      title: string;
+    };
+  }) => {
+    try {
+      console.log('Creating conversation record in Supabase');
+      const { error } = await supabase
+        .from('user_conversations')
+        .insert({
+          clerk_id: clerkId,
+          agent_id: data.agentId,
+          elevenlabs_conversation_id: data.elevenLabsConversationId,
+          start_time: data.startTime,
+          end_time: data.endTime,
+          transcript: data.transcript || [],
+          analysis: data.analysis || {},
+          scenario_info: data.scenarioInfo || { title: 'Unknown Scenario' },
+          status: 'success'
+        });
+
+      if (error) {
+        console.error('Database error during conversation record creation:', error);
+        throw error;
+      }
+
+      console.log('Successfully created conversation record');
+    } catch (error) {
+      console.error('Failed to create conversation record:', error);
+      throw error;
+    }
+  }, [supabase]);
+
   return {
     startTracking,
     endTracking,
     pendingConversation,
-    syncPendingConversation
+    syncPendingConversation,
+    createConversationRecord
   };
 }

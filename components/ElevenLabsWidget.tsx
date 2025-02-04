@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useConversation } from '@11labs/react';
 import { useConversationTracking } from '@/hooks/useConversationTracking';
@@ -10,6 +10,15 @@ import { WaveAnimation } from './ui/wave-animation';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useUser } from "@clerk/nextjs";
+
+interface ElevenLabsConversation {
+  startSession: (options: any) => Promise<string>;
+  endSession: () => Promise<void>;
+  status: string;
+  isSpeaking: boolean;
+  elevenLabsConversationId?: string;
+  isLoading?: boolean;
+}
 
 interface ElevenLabsWidgetProps {
   agentId: string;
@@ -29,38 +38,58 @@ export function ElevenLabsWidget({
   const router = useRouter();
   const { isSignedIn, user } = useUser();
   const { language, t } = useLanguage();
-  const { startTracking, endTracking, conversationData, createConversationRecord } = useConversationTracking();
+  const { startTracking, endTracking, pendingConversation } = useConversationTracking();
   const [hasAudioPermission, setHasAudioPermission] = useState(false);
   const [isHandlingStop, setIsHandlingStop] = useState(false);
+  const [activeConversationId, setActiveConversationId] = useState<string | undefined>();
+  const isRedirecting = useRef(false);
   
   const storeConversationAndRedirect = useCallback(async (endTime: string) => {
-    if (conversationData) {
+    if (isRedirecting.current) {
+      console.log('Already redirecting, skipping...');
+      return;
+    }
+
+    if (pendingConversation) {
       try {
+        isRedirecting.current = true;
         // Store complete conversation data in localStorage
         const pendingConversations = JSON.parse(
           localStorage.getItem('willow_pending_conversations') || '[]'
         );
         
         const conversationRecord = {
-          id: conversationData.elevenLabsConversationId,
-          agentId: conversationData.agentId,
-          startTime: conversationData.startTime,
+          id: pendingConversation.elevenLabsConversationId,
+          agentId: pendingConversation.agentId,
+          startTime: pendingConversation.startTime,
           endTime: endTime,
           storedAt: new Date().toISOString(),
           status: 'pending'
         };
         
         pendingConversations.push(conversationRecord);
+        
+        // Store both the pending conversations and the conversation params
         localStorage.setItem(
           'willow_pending_conversations', 
           JSON.stringify(pendingConversations)
         );
         
+        localStorage.setItem(
+          'willow_conversation_params',
+          JSON.stringify({
+            conversation: pendingConversation.elevenLabsConversationId,
+            agent: pendingConversation.agentId,
+            start_time: pendingConversation.startTime,
+            end_time: endTime
+          })
+        );
+        
         // Create URL parameters for sign-in redirect
         const searchParams = new URLSearchParams({
-          conversation: conversationData.elevenLabsConversationId,
-          agent: conversationData.agentId,
-          start_time: conversationData.startTime,
+          conversation: pendingConversation.elevenLabsConversationId,
+          agent: pendingConversation.agentId,
+          start_time: pendingConversation.startTime,
           end_time: endTime
         });
         
@@ -73,9 +102,9 @@ export function ElevenLabsWidget({
       console.warn('No conversation data available');
       router.push('/sign-in');
     }
-  }, [conversationData, router]);
+  }, [pendingConversation, router]);
 
-  const conversation = useConversation({
+  const conversation: ElevenLabsConversation = useConversation({
     onConnect: () => {
       console.log('Connected to ElevenLabs');
     },
@@ -83,20 +112,44 @@ export function ElevenLabsWidget({
       console.log('Disconnected from ElevenLabs');
       
       try {
+        // Check for either active conversation ID or pending conversation
+        const conversationId = activeConversationId || pendingConversation?.elevenLabsConversationId;
+        
+        if (!conversationId) {
+          console.log('No conversation to handle on disconnect');
+          return;
+        }
+
+        console.log('Handling disconnect for conversation:', conversationId);
         const endTime = new Date().toISOString();
-        endTracking(endTime);
+        
+        // End tracking first to update pendingConversation
+        await endTracking({
+          elevenLabsConversationId: conversationId,
+          endTime,
+          success: true
+        });
         
         // Wait for state update
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        if (!isSignedIn) {
+        // For unsigned users, always redirect to sign-in
+        if (!isSignedIn && !isRedirecting.current) {
+          console.log('Unsigned user, storing conversation and redirecting');
           await storeConversationAndRedirect(endTime);
+        } else if (isSignedIn && !isRedirecting.current) {
+          console.log('Signed in user, redirecting to dashboard');
+          isRedirecting.current = true;
+          router.push('/dashboard');
         }
       } catch (error) {
         console.error('Error in onDisconnect:', error);
-        if (!isSignedIn) {
-          await storeConversationAndRedirect(new Date().toISOString());
+        if (!isSignedIn && !isRedirecting.current) {
+          isRedirecting.current = true;
+          router.push('/sign-in');
         }
+      } finally {
+        setActiveConversationId(undefined);
       }
     },
     onMessage: (message) => console.log('Message:', message),
@@ -106,21 +159,51 @@ export function ElevenLabsWidget({
   // Add a cleanup function to handle component unmounting
   useEffect(() => {
     return () => {
-      console.log('ElevenLabsWidget unmounting, conversation data:', conversationData);
+      // If we have an active conversation when unmounting, handle the cleanup
+      const pendingId = pendingConversation?.elevenLabsConversationId;
+      if ((activeConversationId || pendingId) && !isRedirecting.current) {
+        const endTime = new Date().toISOString();
+        console.log('Handling cleanup for conversation:', {
+          activeId: activeConversationId,
+          pendingId
+        });
+        
+        const conversationId = activeConversationId || pendingId;
+        if (conversationId) {  // TypeScript null check
+          endTracking({
+            elevenLabsConversationId: conversationId,
+            endTime,
+            success: true
+          }).then(() => {
+            if (!isSignedIn && !isRedirecting.current) {
+              storeConversationAndRedirect(endTime);
+            }
+          }).catch(error => {
+            console.error('Error in cleanup:', error);
+          });
+        }
+      }
+      
+      console.log('ElevenLabsWidget unmounting, conversation data:', pendingConversation);
     };
-  }, [conversationData]);
+  }, [activeConversationId, pendingConversation, endTracking, isSignedIn, storeConversationAndRedirect]);
 
   const handleStart = useCallback(async () => {
     try {
-      const conversationId = await conversation.startSession({ agentId });
+      const startTime = new Date().toISOString();
+      const conversationId = await conversation.startSession({ 
+        agentId,
+        conversationId: undefined // Reset any existing conversation ID
+      });
       console.log('ElevenLabs session response:', conversationId);
       
       if (conversationId && typeof conversationId === 'string') {
-        // Store in memory with scenario info
+        setActiveConversationId(conversationId);
+        // Store conversation data with all necessary info
         startTracking({
           elevenLabsConversationId: conversationId,
           agentId,
-          startTime: new Date().toISOString(),
+          startTime,
           scenarioInfo
         });
       }
@@ -134,49 +217,19 @@ export function ElevenLabsWidget({
     setIsHandlingStop(true);
 
     try {
-      console.log('Stop handling - User status:', { 
-        isSignedIn, 
-        userId: user?.id, 
-        conversationData: conversation.elevenLabsConversationId
-      });
-
       const endTime = new Date().toISOString();
       
-      // End ElevenLabs session
+      // End ElevenLabs session - this will trigger onDisconnect
       await conversation.endSession();
-      
-      if (isSignedIn && user) {
-        try {
-          await endTracking({
-            elevenLabsConversationId: conversation.elevenLabsConversationId,
-            endTime,
-            success: true
-          });
-          router.push('/dashboard');
-        } catch (error) {
-          console.error('Failed to store conversation:', error);
-          router.push('/dashboard');
-        }
-      } else if (!isSignedIn) {
-        await storeConversationAndRedirect(endTime);
-      }
     } catch (error) {
       console.error('Failed to stop conversation:', error);
       if (!isSignedIn) {
-        await storeConversationAndRedirect(new Date().toISOString());
+        router.push('/sign-in');
       }
     } finally {
       setIsHandlingStop(false);
     }
-  }, [
-    conversation, 
-    isSignedIn, 
-    router, 
-    endTracking, 
-    user, 
-    isHandlingStop, 
-    storeConversationAndRedirect
-  ]);
+  }, [conversation, isSignedIn, isHandlingStop]);
 
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ audio: true })
@@ -193,7 +246,13 @@ export function ElevenLabsWidget({
 
   // Split the path for nested translations
   const [section, subsection] = translationPath.split('.');
-  const getText = (key: string) => subsection ? t(section, subsection)[key] : t(section, key);
+  const getText = (key: string): string => {
+    if (subsection) {
+      const sectionData = t(section, subsection);
+      return (sectionData[key as keyof typeof sectionData] || key) as string;
+    }
+    return (t(section, key) || key) as string;
+  };
 
   // Add cleanup effect to log state on unmount
   useEffect(() => {
@@ -201,19 +260,33 @@ export function ElevenLabsWidget({
       console.log('ElevenLabsWidget unmounting - State:', {
         isSignedIn,
         userId: user?.id,
-        conversationData,
+        conversationData: pendingConversation,
         isHandlingStop
       });
     };
-  }, [isSignedIn, user, conversationData, isHandlingStop]);
+  }, [isSignedIn, user, pendingConversation, isHandlingStop]);
+
+  // Add effect to log conversation state changes
+  useEffect(() => {
+    console.log('Conversation state updated:', {
+      conversationId: activeConversationId,
+      status: conversation?.status,
+      isConnected: conversation?.status === 'connected'
+    });
+  }, [activeConversationId, conversation?.status]);
 
   console.log('Widget state:', {
-    conversationId: conversation?.elevenLabsConversationId,
+    conversationId: activeConversationId,
     isLoading: conversation?.isLoading,
     hasScenarioInfo: !!scenarioInfo,
     agentId,
     status: conversation?.status
   });
+
+  useEffect(() => {
+    // Update any language-dependent logic when language changes
+    // This might include voice settings, recognition language, etc.
+  }, [language]);
 
   return (
     <div className="w-[600px]">

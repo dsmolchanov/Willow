@@ -32,8 +32,8 @@ interface Analysis {
 
 interface ScenarioInfo {
   title: string;
-  skill_ids: number[];
-  scenario_id: number;
+  skill_ids?: number[];
+  scenario_id?: number;
 }
 
 interface Conversation {
@@ -111,7 +111,17 @@ export default function ConversationsPage() {
       const { data: conversationsData, error: conversationsError } = await supabase
         .from('user_conversations')
         .select(`
-          *,
+          conversation_id,
+          clerk_id,
+          agent_id,
+          elevenlabs_conversation_id,
+          start_time,
+          end_time,
+          status,
+          duration,
+          replics_number,
+          transcript,
+          analysis,
           scenario_info
         `)
         .eq('clerk_id', user.id)
@@ -121,8 +131,15 @@ export default function ConversationsPage() {
         throw conversationsError;
       }
 
-      setConversations(conversationsData);
+      // Map over conversations to ensure scenario_info is properly formatted
+      const formattedConversations = conversationsData.map(conversation => ({
+        ...conversation,
+        scenario_info: conversation.scenario_info || { title: 'Untitled Conversation' }
+      }));
+
+      setConversations(formattedConversations);
     } catch (error) {
+      console.error('Error fetching conversations:', error);
       // Handle error silently or show a user-friendly message
     } finally {
       setIsLoading(false);
@@ -132,17 +149,26 @@ export default function ConversationsPage() {
   // Fetch conversation with skill progress
   const fetchConversationDetails = async (conversation: Conversation) => {
     try {
+      if (!conversation.scenario_info?.skill_ids?.length) {
+        setSelectedConversation({
+          ...conversation,
+          skill_progress: []
+        });
+        return;
+      }
+
       const { data: skillProgress } = await supabase
         .from('user_skill_tracking')
         .select('*')
         .eq('clerk_id', conversation.clerk_id)
-        .in('skill_id', conversation.skill_ids);
+        .in('skill_id', conversation.scenario_info.skill_ids);
 
       setSelectedConversation({
         ...conversation,
-        skill_progress: skillProgress
+        skill_progress: skillProgress || []
       });
     } catch (error) {
+      console.error('Error fetching conversation details:', error);
       // Handle error silently or show a user-friendly message
     }
   };
