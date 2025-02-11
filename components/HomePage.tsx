@@ -59,7 +59,8 @@ export default function HomePage() {
           scenarioInfo={{
             title,
             scenario_id,
-            skill_ids: [...skill_ids]
+            skill_ids: [...skill_ids],
+            type: 'onboarding'
           }}
         />
       </div>

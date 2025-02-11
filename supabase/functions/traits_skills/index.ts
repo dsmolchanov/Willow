@@ -87,6 +87,38 @@ interface LearningPathNode {
     priority_level: 'critical' | 'high' | 'medium' | 'low';
 }
 
+interface TraitPattern {
+    id: number;
+    name: string;
+    pattern_key: string;
+    trait_skill_mappings: TraitSkillMapping[];
+    trait_development_stages: TraitDevelopmentStage[];
+}
+
+interface TraitSkillMapping {
+    skill_id: number;
+    importance: number;
+    role: string;
+    development_order: number;
+    indicators: string[];
+    practice_areas: string[];
+    constraints: any;
+    skills?: {
+        skill_id: number;
+        is_active: boolean;
+    };
+    learning_path?: string[];
+}
+
+interface TraitDevelopmentStage {
+    skill_id: number;
+    stage_from: string;
+    stage_to: string;
+    readiness_score: number;
+    prerequisites: number[];
+    learning_focus: string[];
+}
+
 // Placeholder functions that must be defined for full integration:
 function findSkillById(skillId: number): PrioritizedSkill {
     // In a real scenario, this would retrieve skill data from a cache or DB
@@ -239,26 +271,11 @@ async function getSkillHierarchy(skill_id: number): Promise<string[]> {
 async function generateLearningPath(prioritizedSkills: PrioritizedSkill[]): Promise<LearningPathNode[]> {
     const learningPath: LearningPathNode[] = [];
     const processedSkills = new Set<number>();
-    const skillsByCategory = new Map<string, PrioritizedSkill[]>();
 
-    // Group skills by category
-    await Promise.all(prioritizedSkills.map(async (skill) => {
-        const hierarchy = await getSkillHierarchy(skill.skill_id);
-        const topCategory = hierarchy[0];
-        if (!skillsByCategory.has(topCategory)) {
-            skillsByCategory.set(topCategory, []);
-        }
-        skillsByCategory.get(topCategory)!.push(skill);
-    }));
-
-    // Process each category
-    for (const [category, skills] of skillsByCategory.entries()) {
-        skills.sort((a,b) => b.priority_score - a.priority_score);
-
-        for (const skill of skills) {
+    // Process each skill
+    for (const skill of prioritizedSkills) {
             if (!processedSkills.has(skill.skill_id)) {
                 await addSkillToPath(skill, learningPath, processedSkills);
-            }
         }
     }
 
@@ -297,7 +314,7 @@ function calculateSkillPriorities(weights: SkillWeight[]): PrioritizedSkill[] {
             prerequisites: getPrerequisites(weight.skill_id),
             development_stage: weight.weight_data.development_stage
         }))
-        .sort((a, b) => b.priority_score - a.priority_score);
+        .sort((a: PrioritizedSkill, b: PrioritizedSkill) => b.priority_score - a.priority_score);
 }
 
 function calculatePriorityScore(weight: SkillWeight): number {
@@ -308,58 +325,164 @@ function calculatePriorityScore(weight: SkillWeight): number {
 }
 
 // Functions that handle requests
-serve(async (req) => {
+serve(async (req: Request) => {
     try {
-        // Get the notification payload from the request
         const payload = await req.json()
         console.log('Received payload:', payload)
 
-        const { clerk_id, analysis, scenario_info } = payload
+        const { clerk_id, elevenlabs_conversation_id } = payload
+        console.log('Processing for clerk_id:', clerk_id, 'conversation_id:', elevenlabs_conversation_id)
 
         if (!clerk_id) {
             throw new Error('Clerk ID is required')
         }
 
-        // Get conversation data with analysis
-        const [traitMappings, userTraits] = await Promise.all([
-            loadTraitMappings(),
-            loadUserTraits(clerk_id)
-        ]);
-
-        // If we have scenario_info with skill_ids, process those skills
-        if (scenario_info?.skill_ids?.length > 0) {
-            const weights = calculateSkillWeights(userTraits, traitMappings);
-            
-            // Filter weights to only include skills from this scenario
-            const scenarioWeights = weights.filter(w => 
-                scenario_info.skill_ids.includes(w.skill_id)
-            );
-
-            const { error: updateError } = await supabase
-                .from('user_skill_weights')
-                .upsert(scenarioWeights.map(weight => ({
-                    clerk_id: clerk_id,
-                    skill_id: weight.skill_id,
-                    weight_data: weight.weight_data,
-                    updated_at: new Date().toISOString()
-                })));
-
-            if (updateError) throw updateError;
-
-            const prioritizedSkills = calculateSkillPriorities(scenarioWeights);
-            const learningPath = await generateLearningPath(prioritizedSkills);
-
-            await storeLearningPathAndPrioritizedSkills(clerk_id, learningPath, prioritizedSkills);
+        if (!elevenlabs_conversation_id) {
+            throw new Error('Conversation ID is required')
         }
 
-        return new Response(
-            JSON.stringify({ success: true }),
-            { headers: { 'Content-Type': 'application/json' } }
-        )
+        // Get conversation data with scenario_info
+        const { data: conversation, error: convError } = await supabase
+            .from('user_conversations')
+            .select('*')
+            .eq('elevenlabs_conversation_id', elevenlabs_conversation_id)
+            .single();
+            
+        if (convError) {
+            console.error('Error fetching conversation:', convError);
+            throw convError;
+        }
+
+        const action_type = conversation.scenario_info.type === 'onboarding' ? 'initial_calculation' : 'practice_update'
+        console.log('Determined action_type:', action_type)
+
+        if (action_type === 'initial_calculation') {
+            console.log('Performing initial calculation');
+            // Get trait mappings for initial calculation with active skills only
+            const { data: traitMappings, error: mappingsError } = await supabase
+                .from('trait_patterns')
+                .select(`
+                    *,
+                    trait_skill_mappings!inner(
+                        skill_id,
+                        importance,
+                        role,
+                        development_order,
+                        indicators,
+                        practice_areas,
+                        constraints,
+                        skills!inner(
+                            skill_id,
+                            is_active
+                        )
+                    ),
+                    trait_development_stages!inner(
+                        skill_id,
+                        stage_from,
+                        stage_to,
+                        readiness_score,
+                        prerequisites,
+                        learning_focus
+                    )
+                `)
+                .eq('trait_skill_mappings.skills.is_active', true);
+
+            if (mappingsError) {
+                console.error('Error fetching trait mappings:', mappingsError);
+                throw mappingsError;
+            }
+            console.log('Loaded trait mappings count:', traitMappings?.length);
+
+            // Filter out any remaining inactive skills (just in case)
+            const filteredMappings = traitMappings?.map((mapping: TraitPattern) => ({
+                ...mapping,
+                trait_skill_mappings: mapping.trait_skill_mappings.filter(
+                    (skillMapping: TraitSkillMapping) => skillMapping.skills?.is_active
+                )
+            }));
+
+            console.log('Active skills count:', filteredMappings?.reduce(
+                (sum: number, mapping: TraitPattern) => sum + (mapping.trait_skill_mappings?.length || 0), 
+                0
+            ));
+
+            if (!conversation?.analysis) {
+                console.error('No analysis found in conversation');
+                throw new Error('No analysis found in conversation data');
+            }
+
+            const result = await handleInitialCalculation({
+                clerk_id,
+                data_collection_results: conversation.analysis,
+                traitMappings: filteredMappings
+            });
+
+            console.log('Initial calculation completed');
+            return result;
+        } else if (action_type === 'practice_update') {
+            console.log('Performing practice update');
+            const userTraits = await loadUserTraits(clerk_id, elevenlabs_conversation_id);
+            console.log('Loaded user traits:', !!userTraits);
+            
+            const { data: traitMappings, error: mappingsError } = await supabase
+                .from('trait_patterns')
+                .select(`
+                    *,
+                    trait_skill_mappings!inner(
+                        skill_id,
+                        importance,
+                        role,
+                        development_order,
+                        indicators,
+                        practice_areas,
+                        constraints,
+                        skills!inner(
+                            skill_id,
+                            is_active
+                        )
+                    ),
+                    trait_development_stages!inner(
+                        skill_id,
+                        stage_from,
+                        stage_to,
+                        readiness_score,
+                        prerequisites,
+                        learning_focus
+                    )
+                `)
+                .eq('trait_skill_mappings.skills.is_active', true);
+
+            if (mappingsError) {
+                console.error('Error fetching trait mappings for practice update:', mappingsError);
+                throw mappingsError;
+            }
+
+            // Filter out any remaining inactive skills (just in case)
+            const filteredMappings = traitMappings?.map((mapping: TraitPattern) => ({
+                ...mapping,
+                trait_skill_mappings: mapping.trait_skill_mappings.filter(
+                    (skillMapping: TraitSkillMapping) => skillMapping.skills?.is_active
+                )
+            }));
+
+            return await handlePracticeUpdate(clerk_id, userTraits, filteredMappings || []);
+        } else {
+            throw new Error(`Unsupported action_type: ${action_type}`);
+        }
     } catch (error) {
-        console.error('Error:', error)
+        console.error('Error processing request:', error);
+        let errorMessage = 'Unknown error';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+            console.error('Error stack:', error.stack);
+        } else {
+            console.error('Non-Error object thrown:', error);
+        }
         return new Response(
-            JSON.stringify({ error: error.message }),
+            JSON.stringify({ 
+                error: errorMessage,
+                details: error instanceof Error ? error.stack : String(error)
+            }),
             { status: 400, headers: { 'Content-Type': 'application/json' } }
         )
     }
@@ -529,9 +652,191 @@ function calculateInitialWeights(traits: UserTraits): SkillWeight[] {
     return [];
 }
 
-function calculateSkillWeights(traits: UserTraits, mappings: any[]): SkillWeight[] {
-    // Implementation based on your business logic
-    return [];
+function calculateSkillWeights(traits: UserTraits, mappings: TraitPattern[]): SkillWeight[] {
+    console.log('Calculating skill weights with traits:', {
+        stakes: traits.stakes_level?.value,
+        interaction: traits.interaction_style?.value,
+        confidence: traits.confidence_pattern?.value
+    });
+
+    const weights: SkillWeight[] = [];
+
+    // Process each trait pattern mapping
+    for (const mapping of mappings) {
+        // Get skill mappings for this trait pattern
+        const skillMappings = mapping.trait_skill_mappings || [];
+        const developmentStages = mapping.trait_development_stages || [];
+
+        console.log('Processing trait pattern with:', {
+            skillMappingsCount: skillMappings.length,
+            developmentStagesCount: developmentStages.length,
+            pattern: mapping.pattern_key || mapping.id || 'unknown'
+        });
+
+        for (const skillMapping of skillMappings) {
+            const baseWeight = calculateBaseWeight(traits, mapping, skillMapping);
+            const traitInfluences = determineTraitInfluences(traits, mapping, skillMapping);
+            const developmentStage = determineDevelopmentStage(traits, developmentStages, skillMapping);
+
+            weights.push({
+                skill_id: skillMapping.skill_id,
+                weight_data: {
+                    base_weight: baseWeight,
+                    trait_influences: traitInfluences,
+                    final_weight: calculateFinalWeight(baseWeight, traitInfluences),
+                    development_stage: developmentStage,
+                    evidence: {
+                        importance_factors: generateImportanceFactors(traits, mapping, skillMapping),
+                        learning_path: skillMapping.learning_path || [],
+                        practice_areas: skillMapping.practice_areas || []
+                    }
+                }
+            });
+        }
+    }
+
+    const summary = {
+        totalWeights: weights.length,
+        weightsByFinalWeight: weights.reduce((acc: Record<number, number>, weight: SkillWeight) => {
+            const range = Math.floor(weight.weight_data.final_weight * 10) / 10;
+            acc[range] = (acc[range] || 0) + 1;
+            return acc;
+        }, {} as Record<number, number>),
+        averageFinalWeight: weights.reduce((sum: number, weight: SkillWeight) => 
+            sum + weight.weight_data.final_weight, 0
+        ) / weights.length
+    };
+
+    console.log('Generated weights summary:', summary);
+    return weights;
+}
+
+function calculateBaseWeight(traits: UserTraits, mapping: TraitPattern, skillMapping: TraitSkillMapping): number {
+    // Base weight calculation based on importance and trait values
+    let weight = skillMapping.importance || 0.5;
+
+    // Adjust weight based on stakes level
+    if (traits.stakes_level?.value === 'high_stakes') {
+        weight *= 1.2;
+    } else if (traits.stakes_level?.value === 'low_stakes') {
+        weight *= 0.8;
+    }
+
+    // Adjust weight based on confidence pattern
+    if (traits.confidence_pattern?.value?.includes('struggling')) {
+        weight *= 1.3;
+    }
+
+    return Math.min(Math.max(weight, 0), 1); // Ensure weight is between 0 and 1
+}
+
+function determineTraitInfluences(traits: UserTraits, mapping: TraitPattern, skillMapping: TraitSkillMapping): TraitInfluence[] {
+    const influences: TraitInfluence[] = [];
+
+    // Add stakes level influence
+    if (traits.stakes_level?.value) {
+        influences.push({
+            trait_type: 'stakes_level',
+            pattern_key: traits.stakes_level.value,
+            importance: 0.8,
+            role: 'modifier',
+            indicators: ['Affects urgency and priority']
+        });
+    }
+
+    // Add confidence pattern influence
+    if (traits.confidence_pattern?.value) {
+        influences.push({
+            trait_type: 'confidence_pattern',
+            pattern_key: traits.confidence_pattern.value,
+            importance: 0.9,
+            role: 'primary',
+            indicators: ['Determines learning approach']
+        });
+    }
+
+    // Add interaction style influence
+    if (traits.interaction_style?.value) {
+        influences.push({
+            trait_type: 'interaction_style',
+            pattern_key: traits.interaction_style.value,
+            importance: 0.7,
+            role: 'context',
+            indicators: ['Shapes practice methodology']
+        });
+    }
+
+    return influences;
+}
+
+function calculateFinalWeight(baseWeight: number, influences: TraitInfluence[]): number {
+    let finalWeight = baseWeight;
+
+    // Apply each influence's effect
+    for (const influence of influences) {
+        finalWeight *= (1 + (influence.importance - 0.5) * 0.4);
+    }
+
+    return Math.min(Math.max(finalWeight, 0), 1); // Ensure weight is between 0 and 1
+}
+
+function determineDevelopmentStage(traits: UserTraits, stages: TraitDevelopmentStage[], skillMapping: TraitSkillMapping): {
+    current: string;
+    target: string;
+    readiness: number;
+} {
+    // Default stage if no matching stages found
+    const defaultStage = {
+        current: 'developing',
+        target: 'mastering',
+        readiness: 0.5
+    };
+
+    // Find matching stage based on traits
+    const matchingStage = stages.find(stage => 
+        stage.skill_id === skillMapping.skill_id &&
+        traits.confidence_pattern?.value?.includes(stage.stage_from)
+    );
+
+    if (!matchingStage) {
+        return defaultStage;
+    }
+
+    return {
+        current: matchingStage.stage_from,
+        target: matchingStage.stage_to,
+        readiness: matchingStage.readiness_score
+    };
+}
+
+function generateImportanceFactors(traits: UserTraits, mapping: TraitPattern, skillMapping: TraitSkillMapping): ImportanceFactor[] {
+    const factors: ImportanceFactor[] = [];
+
+    // Add stakes-based factor
+    if (traits.stakes_level?.value === 'high_stakes') {
+        factors.push({
+            reason: 'Critical for high-stakes situations',
+            indicators: ['High impact on outcomes', 'Immediate relevance']
+        });
+    }
+
+    // Add confidence-based factor
+    if (traits.confidence_pattern?.value?.includes('struggling')) {
+        factors.push({
+            reason: 'Identified as growth area',
+            indicators: ['Current performance gap', 'Development opportunity']
+        });
+    }
+
+    // Add interaction style factor
+    if (traits.interaction_style?.value) {
+        factors.push({
+            reason: 'Aligns with interaction preferences',
+            indicators: ['Matches learning style', 'Supports natural tendencies']
+        });
+    }
+
+    return factors;
 }
 
 async function storeLearningPathAndPrioritizedSkills(
@@ -539,61 +844,138 @@ async function storeLearningPathAndPrioritizedSkills(
     learningPath: LearningPathNode[], 
     prioritizedSkills: PrioritizedSkill[]
 ): Promise<void> {
-    const { error } = await supabase
+    // First try to find existing record
+    const { data: existingPath, error: selectError } = await supabase
         .from('user_learning_paths')
-        .upsert({
+        .select('id')
+        .eq('clerk_id', clerkId)
+        .single();
+
+    if (selectError && selectError.code !== 'PGRST116') { // PGRST116 is "not found" error
+        console.error('Error checking existing learning path:', selectError);
+        throw selectError;
+    }
+
+    const record = {
             clerk_id: clerkId,
             learning_path: learningPath,
             prioritized_skills: prioritizedSkills,
-            updated_at: new Date().toISOString()
-        });
-    
-    if (error) throw error;
+        created_at: new Date().toISOString()
+    };
+
+    if (existingPath?.id) {
+        // Update existing record
+        const { error: updateError } = await supabase
+            .from('user_learning_paths')
+            .update(record)
+            .eq('id', existingPath.id);
+
+        if (updateError) {
+            console.error('Error updating learning path:', updateError);
+            throw updateError;
+        }
+    } else {
+        // Insert new record
+        const { error: insertError } = await supabase
+            .from('user_learning_paths')
+            .insert(record);
+
+        if (insertError) {
+            console.error('Error inserting learning path:', insertError);
+            throw insertError;
+        }
+    }
 }
 
 // Update the handleInitialCalculation function to fix type issues
 async function handleInitialCalculation(data: {
     clerk_id: string,
-    data_collection_results?: any,
-    userTraits?: UserTraits,
-    traitMappings?: any[]
+    data_collection_results: any,
+    traitMappings: TraitPattern[]
 }): Promise<Response> {
     try {
+        console.log('Starting handleInitialCalculation with:', {
+            hasClerkId: !!data.clerk_id,
+            hasResults: !!data.data_collection_results,
+            mappingsCount: data.traitMappings?.length
+        });
+
+        if (!data.data_collection_results) {
+            throw new Error('data_collection_results is required for initial calculation');
+        }
+
+        if (!data.traitMappings?.length) {
+            throw new Error('trait mappings are required for initial calculation');
+        }
+
         let traits: UserTraits;
-        
-        if (data.data_collection_results) {
+        try {
             traits = processTraitsData(data.data_collection_results);
+            console.log('Processed traits data:', {
+                hasLifeContext: !!traits.life_context,
+                hasStakesLevel: !!traits.stakes_level,
+                hasGrowthMotivation: !!traits.growth_motivation,
+                hasConfidencePattern: !!traits.confidence_pattern,
+                hasInteractionStyle: !!traits.interaction_style
+            });
             
-            await supabase.from('user_traits').insert({
+            // Store the processed traits
+            const { error: traitsError } = await supabase.from('user_traits').insert({
                 clerk_id: data.clerk_id,
                 stakes_level: traits.stakes_level,
                 interaction_style: traits.interaction_style,
-                confidence_pattern: traits.confidence_pattern
+                confidence_pattern: traits.confidence_pattern,
+                created_at: new Date().toISOString()
             });
-        } else if (data.userTraits && data.traitMappings) {
-            traits = data.userTraits;
-        } else {
-            throw new Error('Either data_collection_results or userTraits+traitMappings must be provided');
+
+            if (traitsError) {
+                console.error('Error storing user traits:', traitsError);
+                throw traitsError;
+            }
+        } catch (error) {
+            console.error('Error processing traits data:', error);
+            throw new Error(`Failed to process traits data: ${error instanceof Error ? error.message : String(error)}`);
         }
 
-        const weights = data.traitMappings 
-            ? calculateSkillWeights(traits, data.traitMappings)
-            : calculateInitialWeights(traits);
+        let weights;
+        try {
+            weights = calculateSkillWeights(traits, data.traitMappings);
+            console.log(`Calculated ${weights?.length || 0} skill weights`);
 
+            if (!weights?.length) {
+                throw new Error('No skill weights were calculated');
+            }
+        } catch (error) {
+            console.error('Error calculating skill weights:', error);
+            throw new Error(`Failed to calculate skill weights: ${error instanceof Error ? error.message : String(error)}`);
+        }
+
+        try {
         const { error: updateError } = await supabase
             .from('user_skill_weights')
-            .upsert(weights.map((weight: SkillWeight) => ({
+                .upsert(weights.map(weight => ({
                 clerk_id: data.clerk_id,
                 skill_id: weight.skill_id,
                 weight_data: weight.weight_data,
                 updated_at: new Date().toISOString()
             })));
 
-        if (updateError) throw updateError;
+            if (updateError) {
+                console.error('Error updating skill weights:', updateError);
+                throw updateError;
+            }
+        } catch (error) {
+            console.error('Error storing skill weights:', error);
+            throw new Error(`Failed to store skill weights: ${error instanceof Error ? error.message : String(error)}`);
+        }
 
-        if (data.traitMappings) {
+        try {
             const prioritizedSkills = calculateSkillPriorities(weights);
+            console.log(`Prioritized ${prioritizedSkills.length} skills`);
+            
             const learningPath = await generateLearningPath(prioritizedSkills);
+            console.log(`Generated learning path with ${learningPath.length} nodes`);
+
             await storeLearningPathAndPrioritizedSkills(data.clerk_id, learningPath, prioritizedSkills);
 
             return new Response(
@@ -605,21 +987,17 @@ async function handleInitialCalculation(data: {
                 }),
                 { headers: { 'Content-Type': 'application/json' } }
             );
+        } catch (error) {
+            console.error('Error generating learning path:', error);
+            throw new Error(`Failed to generate learning path: ${error instanceof Error ? error.message : String(error)}`);
         }
-
-        return new Response(
-            JSON.stringify({ 
-                success: true, 
-                weights 
-            }),
-            { headers: { 'Content-Type': 'application/json' } }
-        );
 
     } catch (error) {
         console.error('Error in handleInitialCalculation:', error);
         return new Response(
             JSON.stringify({ 
-                error: error instanceof Error ? error.message : 'Unknown error' 
+                error: error instanceof Error ? error.message : String(error),
+                details: error instanceof Error ? error.stack : String(error)
             }),
             { 
                 status: 500, 
@@ -632,7 +1010,7 @@ async function handleInitialCalculation(data: {
 async function handlePracticeUpdate(
     clerkId: string,
     userTraits: UserTraits,
-    traitMappings: any[]
+    traitMappings: TraitPattern[]
 ): Promise<Response> {
     try {
         const { data: currentWeights } = await supabase
@@ -685,47 +1063,3 @@ async function handlePracticeUpdate(
         );
     }
 }
-
-// Update the handler to use the new combined function with correct arguments
-const handler = async (req: any) => {
-    const { clerk_id, action_type, elevenlabs_conversation_id } = req.body;
-
-    try {
-        // Get conversation data
-        const { data: conversation } = await supabase
-            .from('conversations')
-            .select('*')
-            .eq('id', elevenlabs_conversation_id)
-            .single();
-
-        if (action_type === 'initial_calculation') {
-            // Get trait mappings for initial calculation
-            const { data: traitMappings } = await supabase
-                .from('trait_patterns')
-                .select('*');
-
-            return await handleInitialCalculation({
-                clerk_id,
-                data_collection_results: conversation.data_collection_results,
-                traitMappings
-            });
-        } else {
-            return await handlePracticeUpdate(
-                clerk_id,
-                {} as UserTraits, // This needs to be loaded from the database
-                [] // This needs to be loaded from the database
-            );
-        }
-    } catch (error) {
-        console.error('Error processing traits/skills:', error);
-        return new Response(
-            JSON.stringify({ 
-                error: error instanceof Error ? error.message : 'Unknown error' 
-            }),
-            { 
-                status: 500, 
-                headers: { 'Content-Type': 'application/json' } 
-            }
-        );
-    }
-};

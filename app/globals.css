@@ -54,6 +54,10 @@
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    --willow-sage: 73 20% 95%;      /* #f4f6f0 */
+    --willow-olive: 74 24% 34%;     /* #606B41 */
+    --willow-lime: 65 57% 71%;      /* #D4DE8F */
+    --willow-cream: 65 71% 86%;     /* #F0F5C4 */
   }
   .dark {
     --background: 222.2 84% 4.9%;

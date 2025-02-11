@@ -27,6 +27,7 @@ interface ElevenLabsWidgetProps {
     scenario_id: number;
     title: string;
     skill_ids: number[];
+    type: 'lesson' | 'onboarding';  
   };
 }
 
@@ -53,7 +54,8 @@ export function ElevenLabsWidget({
     if (pendingConversation) {
       try {
         isRedirecting.current = true;
-        // Store complete conversation data in localStorage
+        
+        // Store complete conversation data in localStorage with more metadata
         const pendingConversations = JSON.parse(
           localStorage.getItem('willow_pending_conversations') || '[]'
         );
@@ -64,12 +66,14 @@ export function ElevenLabsWidget({
           startTime: pendingConversation.startTime,
           endTime: endTime,
           storedAt: new Date().toISOString(),
-          status: 'pending'
+          status: 'pending',
+          scenarioInfo: pendingConversation.scenarioInfo, // Include scenario info
+          attempts: 0 // Track sync attempts
         };
         
         pendingConversations.push(conversationRecord);
         
-        // Store both the pending conversations and the conversation params
+        // Store both pending conversations and conversation params
         localStorage.setItem(
           'willow_pending_conversations', 
           JSON.stringify(pendingConversations)
@@ -81,7 +85,8 @@ export function ElevenLabsWidget({
             conversation: pendingConversation.elevenLabsConversationId,
             agent: pendingConversation.agentId,
             start_time: pendingConversation.startTime,
-            end_time: endTime
+            end_time: endTime,
+            scenario_info: pendingConversation.scenarioInfo
           })
         );
         
@@ -90,12 +95,19 @@ export function ElevenLabsWidget({
           conversation: pendingConversation.elevenLabsConversationId,
           agent: pendingConversation.agentId,
           start_time: pendingConversation.startTime,
-          end_time: endTime
+          end_time: endTime,
+          return_to: '/dashboard' // Add return path
+        });
+        
+        console.log('Storing conversation and redirecting:', {
+          conversationId: pendingConversation.elevenLabsConversationId,
+          status: 'pending'
         });
         
         router.push(`/sign-in?${searchParams.toString()}`);
       } catch (error) {
         console.error('Failed to store conversation:', error);
+        isRedirecting.current = false; // Reset redirecting state on error
         router.push('/sign-in');
       }
     } else {
@@ -156,20 +168,20 @@ export function ElevenLabsWidget({
     onError: (error) => console.error('Error:', error),
   });
 
-  // Add a cleanup function to handle component unmounting
+  // Cleanup effect
   useEffect(() => {
     return () => {
-      // If we have an active conversation when unmounting, handle the cleanup
       const pendingId = pendingConversation?.elevenLabsConversationId;
       if ((activeConversationId || pendingId) && !isRedirecting.current) {
         const endTime = new Date().toISOString();
         console.log('Handling cleanup for conversation:', {
           activeId: activeConversationId,
-          pendingId
+          pendingId,
+          isRedirecting: isRedirecting.current
         });
         
         const conversationId = activeConversationId || pendingId;
-        if (conversationId) {  // TypeScript null check
+        if (conversationId) {
           endTracking({
             elevenLabsConversationId: conversationId,
             endTime,
@@ -180,13 +192,14 @@ export function ElevenLabsWidget({
             }
           }).catch(error => {
             console.error('Error in cleanup:', error);
+            if (!isSignedIn && !isRedirecting.current) {
+              router.push('/sign-in');
+            }
           });
         }
       }
-      
-      console.log('ElevenLabsWidget unmounting, conversation data:', pendingConversation);
     };
-  }, [activeConversationId, pendingConversation, endTracking, isSignedIn, storeConversationAndRedirect]);
+  }, [activeConversationId, pendingConversation, endTracking, isSignedIn, storeConversationAndRedirect, router]);
 
   const handleStart = useCallback(async () => {
     try {

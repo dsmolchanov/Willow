@@ -14,8 +14,12 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 interface Skill {
   skill_id: number;
   name: string;
+  theory?: string;
   new_theory?: string;
   level: number;
+  skill_number?: string;
+  parent_skill_id?: number;
+  eval_prompt?: string;
 }
 
 interface Scenario {
@@ -229,17 +233,28 @@ export default function LessonsPage() {
 
     const loadSkills = async () => {
       try {
-        const { data, error: skillsError } = await supabase
-          .from('skills')
-          .select('skill_id, name, new_theory, level')
-          .in('skill_id', selectedScenario.skill_ids);
+        // Fetch skills directly from skill_translations table
+        const { data: skillsData, error: skillsError } = await supabase
+          .from('skill_translations')
+          .select(`
+            skill_id,
+            name,
+            theory,
+            new_theory,
+            level,
+            skill_number,
+            parent_skill_id,
+            eval_prompt
+          `)
+          .in('skill_id', selectedScenario.skill_ids)
+          .eq('language', selectedScenario.language);
 
         if (skillsError) {
           console.error('Error loading skills:', skillsError);
           return;
         }
-        
-        setSkills(data || []);
+
+        setSkills(skillsData || []);
       } catch (err) {
         console.error('Error in loadSkills:', err);
       }
@@ -381,44 +396,68 @@ export default function LessonsPage() {
                 <div className="flex-1 min-h-0">
                   <TabsContent value="theory" className="h-full overflow-y-auto px-6 py-4 m-0">
                     <div className="space-y-4">
-                      <h3 className="text-lg font-semibold mb-4">Skills to Learn</h3>
+                      <h3 className="text-lg font-semibold mb-4 text-[hsl(var(--willow-olive))]">Skills to Learn</h3>
                       {skills.length > 0 ? (
                         <div className="space-y-2">
                           {skills.map((skill) => (
                             <div key={`skill-${skill.skill_id}`}>
                               <div
-                                className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                className="flex items-center justify-between p-4 bg-[hsl(var(--willow-sage))] dark:bg-[hsl(var(--willow-olive)_/_0.1)] rounded-lg cursor-pointer hover:bg-[hsl(var(--willow-lime)_/_0.1)] dark:hover:bg-[hsl(var(--willow-olive)_/_0.2)] transition-colors border border-[hsl(var(--willow-lime)_/_0.2)]"
                                 onClick={() => setExpandedSkillId(expandedSkillId === skill.skill_id ? null : skill.skill_id)}
                               >
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-3">
                                   <ChevronRight 
-                                    className={`w-4 h-4 transition-transform ${expandedSkillId === skill.skill_id ? 'transform rotate-90' : ''}`}
+                                    className={`w-4 h-4 text-[hsl(var(--willow-olive))] transition-transform ${expandedSkillId === skill.skill_id ? 'transform rotate-90' : ''}`}
                                   />
-                                  <h4 className="font-medium text-foreground">{skill.name}</h4>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium text-[hsl(var(--willow-olive)_/_0.6)]">
+                                      {skill.skill_number || skill.skill_id}
+                                    </span>
+                                    <h4 className="font-medium text-[hsl(var(--willow-olive))]">
+                                      {skill.name}
+                                    </h4>
+                                  </div>
                                 </div>
-                                <div className="text-xs text-muted-foreground">
+                                <div className="text-xs text-[hsl(var(--willow-olive)_/_0.8)]">
                                   Level {skill.level}
                                 </div>
                               </div>
                               {expandedSkillId === skill.skill_id && skill.new_theory && (
-                                <div key={`skill-theory-${skill.skill_id}`} className="mt-2 p-4 bg-white dark:bg-black rounded-lg prose dark:prose-invert max-w-none text-black dark:text-white">
-                                  <Markdown>{skill.new_theory}</Markdown>
+                                <div className="mt-2 p-4 bg-[hsl(var(--willow-cream)_/_0.3)] rounded-lg prose dark:prose-invert max-w-none">
+                                  <div className="text-[hsl(var(--willow-olive))]">
+                                    <Markdown>{skill.new_theory}</Markdown>
+                                  </div>
                                 </div>
                               )}
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="text-muted-foreground">No skills associated with this lesson.</p>
+                        <p className="text-[hsl(var(--willow-olive)_/_0.6)]">No skills associated with this lesson.</p>
                       )}
                     </div>
                   </TabsContent>
 
                   <TabsContent value="practice" className="h-full overflow-y-auto px-6 py-4 m-0">
                     <div className="space-y-4">
-                      <h3 className="text-lg font-semibold mb-4">Practice Scenario</h3>
-                      <div className="prose dark:prose-invert max-w-none text-black dark:text-white">
-                        <Markdown>{selectedScenario.description}</Markdown>
+                      <h3 className="text-lg font-semibold mb-4 text-[hsl(var(--willow-olive))]">Practice Scenario</h3>
+                      <div className="prose max-w-none">
+                        <div className="space-y-6">
+                          <div className="bg-[hsl(var(--willow-sage))] dark:bg-[hsl(var(--willow-olive)_/_0.1)] backdrop-blur-sm p-6 rounded-lg border border-[hsl(var(--willow-lime)_/_0.2)]">
+                            <h2 className="text-xl font-semibold text-[hsl(var(--willow-olive))] mb-4">{selectedScenario.title}</h2>
+                            <div className="space-y-6">
+                              <Markdown 
+                                components={{
+                                  h1: ({children}) => <h3 className="text-lg font-semibold text-[hsl(var(--willow-olive))] mt-6 mb-3">{children}</h3>,
+                                  h2: ({children}) => <h4 className="text-base font-medium text-[hsl(var(--willow-olive)_/_0.8)] mt-4 mb-2">{children}</h4>,
+                                  p: ({children}) => <p className="text-[hsl(var(--willow-olive))] leading-relaxed mb-4 bg-[hsl(var(--willow-cream)_/_0.3)] p-3 rounded-md">{children}</p>
+                                }}
+                              >
+                                {selectedScenario.description}
+                              </Markdown>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </TabsContent>
@@ -441,7 +480,8 @@ export default function LessonsPage() {
                     scenarioInfo={{
                       scenario_id: selectedScenario.scenario_id,
                       title: selectedScenario.title,
-                      skill_ids: selectedScenario.skill_ids
+                      skill_ids: selectedScenario.skill_ids,
+                      type: 'lesson'
                     }}
                   />
                 </div>

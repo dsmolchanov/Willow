@@ -41,6 +41,7 @@ export default function SkillsPage() {
   const [learningPathData, setLearningPathData] = useState<LearningPathData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [focusedSkills, setFocusedSkills] = useState<FocusedSkill[]>([]);
+  const [skillTranslations, setSkillTranslations] = useState<Map<number, string>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [scenarioData, setScenarioData] = useState<any>(null);
@@ -56,6 +57,7 @@ export default function SkillsPage() {
 
     const loadLearningPathData = async () => {
       try {
+        // First get learning path data
         const { data: pathData, error: pathError } = await supabase
           .from('user_learning_paths')
           .select('learning_path, prioritized_skills')
@@ -72,32 +74,97 @@ export default function SkillsPage() {
           return;
         }
 
-        setLearningPathData(pathData);
+        // Get all skill IDs from both learning path and prioritized skills
+        const skillIds = [
+          ...(pathData?.learning_path?.map((lp: any) => lp.skill_id) || []),
+          ...(pathData?.prioritized_skills?.map((ps: any) => ps.skill_id) || [])
+        ];
 
-        if (pathData?.prioritized_skills && pathData?.learning_path) {
-          const topPrioritizedSkills = pathData.prioritized_skills
-            .sort((a: any, b: any) => b.priority_score - a.priority_score)
-            .slice(0, 5);
+        if (skillIds.length > 0) {
+          // Fetch both translations and active status
+          const [translationsResponse, skillsResponse] = await Promise.all([
+            supabase
+              .from('skill_translations')
+              .select('skill_id, name')
+              .in('skill_id', skillIds)
+              .eq('language', 'ru'),
+            supabase
+              .from('skills')
+              .select('skill_id, is_active')
+              .in('skill_id', skillIds)
+          ]);
 
-          const topSkills = topPrioritizedSkills
-            .map((prioritySkill: any) => {
-              const learningPathSkill = pathData.learning_path.find(
-                (lp: any) => lp.skill_id === prioritySkill.skill_id
-              );
-              
-              if (!learningPathSkill) return null;
+          if (translationsResponse.error) {
+            console.error('Error fetching skill translations:', translationsResponse.error);
+            setError('Error loading skill names. Please try again later.');
+            return;
+          }
 
-              return {
-                skill_id: prioritySkill.skill_id,
-                name: learningPathSkill.learning_activities?.[0]?.replace('General activity for ', '') || 'Unnamed Skill',
-                priority_level: learningPathSkill.priority_level || 'medium'
-              };
-            })
-            .filter(Boolean);
+          if (skillsResponse.error) {
+            console.error('Error fetching skills:', skillsResponse.error);
+            setError('Error loading skill data. Please try again later.');
+            return;
+          }
 
-          setFocusedSkills(topSkills);
+          // Create maps for translations and active status
+          const skillNames = new Map(translationsResponse.data?.map(t => [t.skill_id, t.name]));
+          const activeStatus = new Map(skillsResponse.data?.map(s => [s.skill_id, s.is_active]));
+
+          setSkillTranslations(skillNames);
+
+          // Update learning path and prioritized skills with active status
+          const updatedPathData = {
+            learning_path: pathData.learning_path.map((skill: any) => ({
+              ...skill,
+              is_active: activeStatus.get(skill.skill_id)
+            })),
+            prioritized_skills: pathData.prioritized_skills.map((skill: any) => ({
+              ...skill,
+              is_active: activeStatus.get(skill.skill_id)
+            }))
+          };
+
+          setLearningPathData(updatedPathData);
+
+          // Update focused skills to only include active skills
+          if (updatedPathData.prioritized_skills && updatedPathData.learning_path) {
+            const topPrioritizedSkills = Array.from(
+              new Map(
+                updatedPathData.prioritized_skills
+                  .filter((skill: any) => activeStatus.get(skill.skill_id) !== false)
+                  .sort((a: any, b: any) => b.priority_score - a.priority_score)
+                  .map((skill: any) => [skill.skill_id, skill])
+              ).values()
+            ).slice(0, 5);
+
+            const topSkills = topPrioritizedSkills
+              .map((prioritySkill: any) => {
+                const learningPathSkill = updatedPathData.learning_path.find(
+                  (lp: any) => lp.skill_id === prioritySkill.skill_id
+                );
+                
+                if (!learningPathSkill) return null;
+
+                const skillName = skillNames.get(prioritySkill.skill_id);
+                if (!skillName) return null;
+
+                return {
+                  skill_id: prioritySkill.skill_id,
+                  name: skillName,
+                  priority_level: learningPathSkill.priority_level || 'medium'
+                } as FocusedSkill;
+              })
+              .filter((skill): skill is FocusedSkill => skill !== null);
+
+            const uniqueTopSkills = Array.from(
+              new Map(topSkills.map(skill => [skill.skill_id, skill])).values()
+            );
+
+            setFocusedSkills(uniqueTopSkills);
+          }
         }
       } catch (err) {
+        console.error('Error in loadLearningPathData:', err);
         setError('An unexpected error occurred while loading your skills data.');
       }
     };
@@ -107,21 +174,32 @@ export default function SkillsPage() {
 
   const handleToggleFocusSkill = (skillId: number, skillName: string, priority: string) => {
     setFocusedSkills(prevSkills => {
-      const isCurrentlyFocused = prevSkills.some(s => s.skill_id === skillId);
+        // Check if skill is already focused
+        const isCurrentlyFocused = prevSkills.some(s => s.skill_id === skillId);
 
-      if (isCurrentlyFocused) {
-        return prevSkills.filter(s => s.skill_id !== skillId);
-      }
+        if (isCurrentlyFocused) {
+            // Remove the skill if it's already focused
+            return prevSkills.filter(s => s.skill_id !== skillId);
+        }
 
-      if (prevSkills.length >= 5) {
-        toast.error('Maximum skills reached', {
-          description: 'You can only focus on up to 5 skills. Please remove a skill before adding another.',
-          duration: 4000,
-        });
-        return prevSkills;
-      }
+        // Check maximum limit
+        if (prevSkills.length >= 5) {
+            toast.error('Maximum skills reached', {
+                description: 'You can only focus on up to 5 skills. Please remove a skill before adding another.',
+                duration: 4000,
+            });
+            return prevSkills;
+        }
 
-      return [...prevSkills, { skill_id: skillId, name: skillName, priority_level: priority }];
+        // Get the translated name from our translations map
+        const translatedName = skillTranslations.get(skillId) || skillName;
+
+        // Add the new skill
+        return [...prevSkills, { 
+            skill_id: skillId, 
+            name: translatedName, 
+            priority_level: priority 
+        }];
     });
   };
 
@@ -212,10 +290,11 @@ export default function SkillsPage() {
       <div className="flex">
         <div className="flex-1 overflow-y-auto pr-4 max-h-[calc(100vh-2rem)]">
           <SkillRoadmap 
-            learningPath={learningPathData.learning_path}
-            prioritizedSkills={learningPathData.prioritized_skills}
+            learningPath={learningPathData?.learning_path}
+            prioritizedSkills={learningPathData?.prioritized_skills}
             focusedSkillIds={focusedSkills.map(s => s.skill_id)}
             onToggleFocusSkill={handleToggleFocusSkill}
+            skillTranslations={skillTranslations}
           />
         </div>
         

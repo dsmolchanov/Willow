@@ -13,6 +13,7 @@ interface SkillRoadmapProps {
     priority_level: 'critical' | 'high' | 'medium' | 'low' | 'uncategorized';
     learning_activities: string[];
     estimated_duration: number;
+    is_active?: boolean;
   }>;
   prioritizedSkills: Array<{
     skill_id: number;
@@ -22,35 +23,42 @@ interface SkillRoadmapProps {
       target: string;
       readiness: number;
     };
+    is_active?: boolean;
   }>;
   focusedSkillIds?: number[];
   onToggleFocusSkill?: (skillId: number, skillName: string, priority: string) => void;
+  skillTranslations: Map<number, string>;
 }
 
 const SkillRoadmap: React.FC<SkillRoadmapProps> = ({ 
   learningPath = [], 
   prioritizedSkills = [],
   focusedSkillIds = [],
-  onToggleFocusSkill
+  onToggleFocusSkill,
+  skillTranslations
 }) => {
   const [expandedSkill, setExpandedSkill] = useState<number | null>(null);
 
-  // Early return if no data
-  if (!learningPath.length || !prioritizedSkills.length) {
+  // Filter out inactive skills
+  const activeSkills = learningPath.filter(skill => skill.is_active !== false);
+  const activePrioritizedSkills = prioritizedSkills.filter(skill => skill.is_active !== false);
+
+  // Early return if no active data
+  if (!activeSkills.length || !activePrioritizedSkills.length) {
     return (
       <div className="max-w-4xl mx-auto p-4">
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            No skill data available. Please check back later.
+            No active skill data available. Please check back later.
           </AlertDescription>
         </Alert>
       </div>
     );
   }
 
-  // Group skills by priority level
-  const groupedSkills = learningPath.reduce((acc, skill) => {
+  // Group active skills by priority level
+  const groupedSkills = activeSkills.reduce((acc, skill) => {
     const priority = skill.priority_level || 'uncategorized';
     if (!acc[priority]) acc[priority] = [];
     acc[priority].push(skill);
@@ -62,7 +70,7 @@ const SkillRoadmap: React.FC<SkillRoadmapProps> = ({
 
   // Get priority score and development info for a skill
   const getSkillDetails = (skillId: number) => {
-    return prioritizedSkills.find(s => s.skill_id === skillId) || {
+    return activePrioritizedSkills.find(s => s.skill_id === skillId) || {
       priority_score: 0,
       development_stage: {
         current: 'unknown',
@@ -72,28 +80,27 @@ const SkillRoadmap: React.FC<SkillRoadmapProps> = ({
     };
   };
 
-  // Priority level colors and descriptions
+  // Priority level colors
   const priorityInfo = {
     critical: {
-      color: 'bg-red-500',
-      description: 'Immediate attention needed - crucial for your growth'
+      color: 'bg-red-500'
     },
     high: {
-      color: 'bg-orange-500',
-      description: 'Important skills to focus on next'
+      color: 'bg-orange-500'
     },
     medium: {
-      color: 'bg-yellow-500',
-      description: 'Valuable skills to develop over time'
+      color: 'bg-yellow-500'
     },
     low: {
-      color: 'bg-blue-500',
-      description: 'Skills to keep in mind for future development'
+      color: 'bg-blue-500'
     },
     uncategorized: {
-      color: 'bg-gray-500',
-      description: 'Skills pending assessment'
+      color: 'bg-gray-500'
     }
+  };
+
+  const getSkillName = (skillId: number, defaultName: string) => {
+    return skillTranslations.get(skillId) || defaultName;
   };
 
   const renderSkillCard = (skill: SkillRoadmapProps['learningPath'][0]) => {
@@ -101,7 +108,7 @@ const SkillRoadmap: React.FC<SkillRoadmapProps> = ({
     
     const details = getSkillDetails(skill.skill_id);
     const isExpanded = expandedSkill === skill.skill_id;
-    const skillName = skill.learning_activities?.[0]?.replace('General activity for ', '') || 'Unnamed Skill';
+    const skillName = getSkillName(skill.skill_id, skill.learning_activities?.[0]?.replace('General activity for ', '') || 'Unnamed Skill');
     const isFocused = focusedSkillIds.includes(skill.skill_id);
     
     return (
@@ -195,17 +202,6 @@ const SkillRoadmap: React.FC<SkillRoadmapProps> = ({
     <div className="max-w-4xl mx-auto p-4">
       <div className="mb-6">
         <h2 className="text-2xl font-bold mb-4">Your Skill Development Journey</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {Object.entries(priorityInfo).map(([priority, info]) => (
-            <div key={priority} className="flex items-start gap-2 p-2 rounded-lg hover:bg-gray-50">
-              <div className={`w-3 h-3 rounded-full mt-1.5 ${info.color}`} />
-              <div>
-                <span className="font-medium capitalize">{priority}</span>
-                <p className="text-sm text-gray-600">{info.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
 
       {priorityOrder.map(priority => {
@@ -225,10 +221,38 @@ const SkillRoadmap: React.FC<SkillRoadmapProps> = ({
   );
 };
 
+interface TransformSkillTrait {
+  skill_id: number;
+  learning_activities: string[];
+  estimated_duration: number;
+}
+
+interface TransformSkillWeight {
+  skill_id: number;
+  weight: number;
+}
+
+interface TransformSkillStage {
+  current: string;
+  target: string;
+}
+
+function calculatePriorityLevel(
+  trait: TransformSkillTrait, 
+  weights: TransformSkillWeight[]
+): 'critical' | 'high' | 'medium' | 'low' | 'uncategorized' {
+  const weight = weights.find(w => w.skill_id === trait.skill_id)?.weight || 0;
+  if (weight > 0.8) return 'critical';
+  if (weight > 0.6) return 'high';
+  if (weight > 0.4) return 'medium';
+  if (weight > 0.2) return 'low';
+  return 'uncategorized';
+}
+
 const transformSkillData = (
-  traits: any,
-  weights: any,
-  stages: any
+  traits: TransformSkillTrait[],
+  weights: TransformSkillWeight[],
+  stages: Record<number, TransformSkillStage>
 ): SkillRoadmapProps => ({
   learningPath: traits.map(trait => ({
     skill_id: trait.skill_id,
@@ -242,9 +266,10 @@ const transformSkillData = (
     development_stage: {
       current: stages[weight.skill_id]?.current || 'beginning',
       target: stages[weight.skill_id]?.target || 'mastering',
-      readiness: weight.weight // 0-1 value from practice results
+      readiness: weight.weight
     }
-  }))
+  })),
+  skillTranslations: new Map<number, string>()
 });
 
 export default SkillRoadmap; 
