@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { useSupabase } from '@/context/SupabaseContext';
 import type { Message } from '@/types';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 // Define the enum to match the database
 type CallStatus = 'success' | 'failure' | 'unknown' | 'processed';
@@ -12,8 +13,9 @@ interface PendingConversation {
   startTime: string;
   scenarioInfo: {
     scenario_id: number;
-    title: string;
     skill_ids: number[];
+    type: 'lesson' | 'onboarding';
+    title?: string;
   };
   transcript?: Message[];
   analysis?: any;
@@ -21,10 +23,16 @@ interface PendingConversation {
   success?: boolean;
 }
 
+interface ConversationTrackingResult {
+  elevenLabsConversationId: string;
+  endTime: string;
+  success: boolean;
+}
+
 export function useConversationTracking() {
+  const [pendingConversation, setPendingConversation] = useState<PendingConversation | null>(null);
   const supabase = useSupabase();
   const { user } = useUser();
-  const [pendingConversation, setPendingConversation] = useState<PendingConversation | null>(null);
 
   const startTracking = useCallback(async (data: {
     elevenLabsConversationId: string;
@@ -32,84 +40,89 @@ export function useConversationTracking() {
     startTime: string;
     scenarioInfo: {
       scenario_id: number;
-      title: string;
       skill_ids: number[];
+      type: 'lesson' | 'onboarding';
     };
   }) => {
-    if (!user?.id) {
-      console.log('Storing conversation data locally for guest user');
-      setPendingConversation(data);
-      return;
-    }
+    console.log('Starting conversation tracking');
+    setPendingConversation(data);
 
     try {
-      console.log('Starting conversation tracking with status: unknown');
-      const { data: result, error } = await supabase
-        .from('user_conversations')
-        .insert({
-          clerk_id: user.id,
-          agent_id: data.agentId,
-          elevenlabs_conversation_id: data.elevenLabsConversationId,
+      // Create or update user_scenarios entry
+      const { error } = await supabase
+        .from('user_scenarios')
+        .upsert({
+          clerk_id: user?.id,
+          scenario_id: data.scenarioInfo.scenario_id,
           start_time: data.startTime,
-          scenario_info: data.scenarioInfo,
-          status: 'unknown'
-        })
-        .select();
+          status: 'In Progress',
+          skill_objectives: {
+            skill_ids: data.scenarioInfo.skill_ids,
+            conversation_id: data.elevenLabsConversationId,
+            type: data.scenarioInfo.type
+          }
+        }, {
+          onConflict: 'clerk_id,scenario_id',
+          ignoreDuplicates: false
+        });
 
-      if (error) {
-        console.error('Database error during start tracking:', error);
-        throw error;
-      }
-
-      console.log('Successfully started tracking:', result);
-      return result[0];
+      if (error) throw error;
     } catch (error) {
-      console.error('Failed to start conversation tracking:', error);
-      throw error;
+      console.error('Error starting scenario tracking:', error);
     }
   }, [supabase, user]);
 
-  const endTracking = useCallback(async (data: {
-    elevenLabsConversationId: string;
-    endTime: string;
-    transcript?: Message[];
-    analysis?: any;
-    success?: boolean;
-  }) => {
-    if (!user?.id) {
-      console.log('Updating pending conversation data for guest user');
-      setPendingConversation(prev => prev ? {
-        ...prev,
-        ...data
-      } : null);
+  const endTracking = useCallback(async ({ 
+    elevenLabsConversationId,
+    endTime,
+    success 
+  }: ConversationTrackingResult) => {
+    console.log('Ending conversation with status:', success ? 'success' : 'failed');
+
+    if (!pendingConversation?.startTime || !pendingConversation?.scenarioInfo.scenario_id || !user?.id) {
+      console.error('Missing required conversation data');
       return;
     }
 
     try {
-      const status: CallStatus = data.success ? 'success' : 'failure';
-      console.log('Ending conversation with status:', status);
-      
+      // Use upsert to ensure all fields are present
       const { error } = await supabase
-        .from('user_conversations')
-        .update({
-          end_time: data.endTime,
-          transcript: data.transcript || [],
-          analysis: data.analysis || {},
-          status
-        })
-        .eq('elevenlabs_conversation_id', data.elevenLabsConversationId);
+        .from('user_scenarios')
+        .upsert({
+          clerk_id: user.id,
+          scenario_id: pendingConversation.scenarioInfo.scenario_id,
+          start_time: pendingConversation.startTime,
+          end_time: endTime,
+          status: 'Completed',
+          skill_objectives: {
+            skill_ids: pendingConversation.scenarioInfo.skill_ids,
+            conversation_id: elevenLabsConversationId,
+            type: pendingConversation.scenarioInfo.type
+          },
+          practice_metrics: {
+            success_rate: success ? 100 : 0,
+            key_achievements: [],
+            challenge_areas: []
+          },
+          duration_minutes: Math.round(
+            (new Date(endTime).getTime() - new Date(pendingConversation.startTime).getTime()) 
+            / (1000 * 60)
+          )
+        }, {
+          onConflict: 'clerk_id,scenario_id',
+          ignoreDuplicates: false
+        });
 
       if (error) {
         console.error('Database error during end tracking:', error);
         throw error;
       }
 
-      console.log('Successfully ended tracking for:', data.elevenLabsConversationId);
     } catch (error) {
       console.error('Failed to end conversation tracking:', error);
       throw error;
     }
-  }, [supabase, user]);
+  }, [supabase, user, pendingConversation]);
 
   const syncPendingConversation = useCallback(async () => {
     if (!user?.id || !pendingConversation) return;
@@ -122,9 +135,7 @@ export function useConversationTracking() {
         await endTracking({
           elevenLabsConversationId: pendingConversation.elevenLabsConversationId,
           endTime: pendingConversation.endTime,
-          transcript: pendingConversation.transcript,
-          analysis: pendingConversation.analysis,
-          success: pendingConversation.success
+          success: pendingConversation.success ?? false
         });
       }
 

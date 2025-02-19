@@ -1,7 +1,7 @@
 "use client"
 
 import { Suspense } from "react"
-import { GraduationCap, CheckSquare, MessageSquare, BookOpen, LogOut } from "lucide-react"
+import { GraduationCap, CheckSquare, MessageSquare, BookOpen, LogOut, LayoutDashboard } from "lucide-react"
 import {
   Sidebar,
   SidebarContent as UISidebarContent,
@@ -22,6 +22,11 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 const items = [
+  {
+    title: "Dashboard",
+    url: "/dashboard",
+    icon: LayoutDashboard,
+  },
   {
     title: "Skills",
     url: "/dashboard/skills",
