@@ -30,6 +30,10 @@ export function useClerkSupabaseClient() {
                 headers.set('Authorization', `Bearer ${token}`);
               }
               
+              // Add accept headers to avoid 406 errors
+              headers.set('Accept', 'application/json');
+              headers.set('Content-Type', 'application/json');
+              
               return fetch(url, {
                 ...options,
                 headers

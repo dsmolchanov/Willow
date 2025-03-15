@@ -3,7 +3,8 @@ const nextConfig = {
     reactStrictMode: true,
     swcMinify: true,
     experimental: {
-      esmExternals: 'loose'
+      esmExternals: 'loose',
+      serverActions: true,
     },
     eslint: {
       ignoreDuringBuilds: true,
@@ -67,7 +68,26 @@ const nextConfig = {
       return config
     },
     images: {
-      domains: ['static.heygen.ai'],
+      domains: [
+        'supabase.co',
+        'storage.googleapis.com',
+        'elevenlabs.io',
+        's1.npass.app',
+      ],
+      remotePatterns: [
+        {
+          protocol: 'https',
+          hostname: 'elevenlabs.io',
+          port: '',
+          pathname: '/**',
+        },
+        {
+          protocol: 'https',
+          hostname: 's1.npass.app',
+          port: '',
+          pathname: '/**',
+        },
+      ],
     },
 };
   

@@ -1,117 +1,169 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
-import { useSearchParams, useRouter } from 'next/navigation';
 import { useConversationTracking } from '@/hooks/useConversationTracking';
-import { translations } from '@/translations';
+import { ConversationStorage } from '@/lib/conversationStorage';
 
-// Get scenario titles from translations
-const DEFAULT_SCENARIOS = {
-  [translations.ru.agent.id]: translations.ru.agent.title,
-  [translations.en.agent.id]: translations.en.agent.title
+// Legacy cleanup helper (now uses the storage service)
+const cleanupLocalStorage = (afterSuccessfulProcessing = false) => {
+  if (afterSuccessfulProcessing) {
+    ConversationStorage.completeProcessing();
+  } else {
+    ConversationStorage.selectiveCleanup();
+  }
 };
 
 export function PostSignupHandler() {
-  const { user, isLoaded } = useUser();
-  const searchParams = useSearchParams();
   const router = useRouter();
+  const { isLoaded, isSignedIn, user } = useUser();
   const { createConversationRecord } = useConversationTracking();
+  const [isRouterReady, setIsRouterReady] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [processingComplete, setProcessingComplete] = useState(false);
+
+  // Ensure router is ready before using it
+  useEffect(() => {
+    setIsRouterReady(true);
+  }, []);
+
+  // Clear redirect flags when component mounts
+  useEffect(() => {
+    // First reset any stale flags
+    ConversationStorage.resetStaleFlags();
+    
+    // If we're in the post-signup handler, the redirect has completed
+    // so we can clear the flags unless we need to handle a conversation
+    const params = ConversationStorage.getConversationParams();
+    if (!params || !params.conversation) {
+      // If there's no conversation to process, safely clear all flags
+      ConversationStorage.clearRedirectFlags();
+      console.log('PostSignupHandler: Cleared redirect flags (no conversation to process)');
+    } else {
+      console.log('PostSignupHandler: Found conversation to process, keeping flags until processing completes');
+    }
+  }, []);
+
+  // When user signs out, clean up localStorage
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      ConversationStorage.clearAll();
+    }
+  }, [isLoaded, isSignedIn]);
 
   useEffect(() => {
-    const processConversation = async () => {
-      // Skip if currently processing or not ready
-      if (isProcessing || !isLoaded || !user) return;
-      
-      // Check if we have any parameters to process
-      const hasUrlParams = searchParams.get('conversation') !== null;
-      const hasLocalStorage = localStorage.getItem('willow_conversation_params') !== null;
-      
-      if (!hasUrlParams && !hasLocalStorage) {
-        // No conversation to process, redirect to dashboard
-        router.replace('/dashboard');
-        return;
-      }
+    // Only proceed if everything is loaded and router is ready
+    // Also prevent processing if we've already completed it
+    if (!isLoaded || !isSignedIn || !isRouterReady || isProcessing || processingComplete) return;
 
-      setIsProcessing(true);
-
+    async function handlePostSignup() {
       try {
-        // Try to get params from URL first
-        let elevenLabsConversationId = searchParams.get('conversation');
-        let agentId = searchParams.get('agent');
-        let startTime = searchParams.get('start_time');
-        let endTime = searchParams.get('end_time');
-
-        // If not in URL, try localStorage
-        if (!elevenLabsConversationId) {
-          try {
-            const storedParams = localStorage.getItem('willow_conversation_params');
-            if (storedParams) {
-              const params = JSON.parse(storedParams);
-              elevenLabsConversationId = params.conversation;
-              agentId = params.agent;
-              startTime = params.start_time;
-              endTime = params.end_time;
-              console.log('Retrieved params from localStorage:', params);
-            }
-          } catch (error) {
-            console.error('Error reading from localStorage:', error);
-          }
-        }
-
-        if (!elevenLabsConversationId || !agentId || !startTime || !endTime) {
-          console.log('Missing required parameters');
-          router.replace('/dashboard');
+        setIsProcessing(true);
+        setError(null);
+        
+        // Get conversation parameters using the storage service
+        const params = ConversationStorage.getConversationParams();
+        
+        if (!params) {
+          console.log('No conversation params found, redirecting to dashboard');
+          setProcessingComplete(true);
+          router.push('/dashboard');
           return;
         }
 
-        // Get scenario title from default scenarios or use untitled
-        const scenarioTitle = DEFAULT_SCENARIOS[agentId] || 'Untitled Scenario';
-        console.log('Using scenario title:', scenarioTitle, 'for agent:', agentId);
+        console.log('Retrieved params from storage:', params);
 
+        // Extract conversation data
+        const {
+          conversation: elevenLabsConversationId,
+          agent: agentId,
+          start_time: startTime,
+          end_time: endTime,
+          scenario_info: scenarioInfo
+        } = params;
+
+        if (!elevenLabsConversationId) {
+          console.log('No conversation ID found, redirecting to dashboard');
+          setError('Missing conversation ID');
+          setProcessingComplete(true);
+          ConversationStorage.clearAll();
+          router.push('/dashboard');
+          return;
+        }
+
+        // Default agent ID for onboarding conversations if not provided
+        // This prevents the not-null constraint error
+        const effectiveAgentId = agentId || 'doXNIsa8qmit1NjLQxgT'; // Default onboarding agent ID
+
+        // Get scenario title (if available)
+        const scenarioTitle = scenarioInfo?.title || 'Introductory Assessment';
+        console.log(`Using scenario title: ${scenarioTitle} for agent: ${effectiveAgentId}`);
+
+        // Create conversation record in Supabase
         console.log('Creating conversation record:', {
           elevenLabsConversationId,
-          agentId,
+          agentId: effectiveAgentId,
           startTime,
           endTime,
           scenarioTitle
         });
-        
-        await createConversationRecord(user.id, {
+
+        const conversationId = await createConversationRecord({
           elevenLabsConversationId,
-          agentId,
+          agentId: effectiveAgentId,
           startTime,
           endTime,
-          scenarioInfo: {
-            title: scenarioTitle
-          }
+          scenarioTitle,
+          scenarioInfo
         });
 
-        // Clear the stored conversation params
-        localStorage.removeItem('willow_conversation_params');
-        localStorage.removeItem('willow_pending_conversations');
-
-        // Use window.location to force a full page reload and clear all state
-        window.location.href = '/dashboard';
+        // Mark processing as complete to prevent duplicate attempts
+        setProcessingComplete(true);
+        
+        // Now it's safe to clean up all storage (after successful processing)
+        ConversationStorage.completeProcessing();
+        
+        if (conversationId) {
+          console.log(`Conversation record created successfully (ID: ${conversationId})`);
+          router.push('/dashboard');
+        } else {
+          // If we don't have a conversationId but no error was thrown,
+          // it's possible the conversation was created but the ID wasn't returned properly
+          console.warn('No conversation ID returned, redirecting to dashboard anyway');
+          
+          // Show error message briefly before redirecting
+          setError('No conversation ID returned, but database operation may have succeeded');
+          setTimeout(() => {
+            router.push('/dashboard');
+          }, 2000);
+        }
       } catch (error) {
-        console.error('Failed to create conversation record:', error);
-        // Clear params and redirect on error too
-        localStorage.removeItem('willow_conversation_params');
-        localStorage.removeItem('willow_pending_conversations');
-        window.location.href = '/dashboard';
+        console.error('Error in post-signup handling:', error);
+        
+        // Selective cleanup on error - don't remove conversation params in case retry is needed
+        ConversationStorage.selectiveCleanup();
+        
+        setError(error instanceof Error ? error.message : 'Unknown error occurred');
+        setProcessingComplete(true);
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 2000);
       } finally {
         setIsProcessing(false);
       }
-    };
+    }
 
-    processConversation();
-  }, [isLoaded, user, searchParams, createConversationRecord, router, isProcessing]);
+    handlePostSignup();
+  }, [isLoaded, isSignedIn, router, createConversationRecord, isRouterReady, isProcessing, processingComplete]);
 
-  // Return null or a loading state if processing
-  return isProcessing ? (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-pulse">Processing conversation...</div>
+  // Component can display an error message if needed
+  return error ? (
+    <div className="p-4 bg-red-50 text-red-700 rounded-md max-w-md mx-auto mt-8">
+      <h3 className="font-bold">Error During Processing</h3>
+      <p>{error}</p>
+      <p className="text-sm mt-2">Redirecting to dashboard...</p>
     </div>
   ) : null;
 } 

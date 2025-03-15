@@ -857,10 +857,9 @@ async function storeLearningPathAndPrioritizedSkills(
     }
 
     const record = {
-            clerk_id: clerkId,
-            learning_path: learningPath,
-            prioritized_skills: prioritizedSkills,
-        created_at: new Date().toISOString()
+        clerk_id: clerkId,
+        learning_path: learningPath,
+        prioritized_skills: prioritizedSkills
     };
 
     if (existingPath?.id) {

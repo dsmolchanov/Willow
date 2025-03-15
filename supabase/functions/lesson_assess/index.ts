@@ -94,7 +94,7 @@ async function handleLessonAssessment(clerk_id: string, conversation_id: string,
 
 function updateSkillWeights(currentWeights: any[], skillEvaluations: SkillEvaluation[]) {
   return currentWeights.map(weight => {
-    const evaluation = skillEvaluations.find(eval => eval.skill_id === weight.skill_id);
+    const evaluation = skillEvaluations.find(skillEval => skillEval.skill_id === weight.skill_id);
     if (!evaluation) return weight;
 
     const currentScore = weight.weight_data.final_score;
