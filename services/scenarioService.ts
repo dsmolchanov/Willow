@@ -74,22 +74,22 @@ export async function processCompletedScenario(
         result: evaluation.result,
         rationale: evaluation.rationale
       }))
-      .filter(eval => eval.skill_id !== 0);
+      .filter(item => item.skill_id !== 0);
 
     // 5. Calculate success rate
     const totalEvaluations = skillEvaluations.length;
-    const successfulEvaluations = skillEvaluations.filter(eval => eval.result === 'success').length;
+    const successfulEvaluations = skillEvaluations.filter(item => item.result === 'success').length;
     const successRate = totalEvaluations > 0 ? (successfulEvaluations / totalEvaluations) * 100 : 0;
 
     // 6. Extract key achievements and challenge areas
     const keyAchievements = skillEvaluations
-      .filter(eval => eval.result === 'success')
-      .map(eval => eval.rationale)
+      .filter(item => item.result === 'success')
+      .map(item => item.rationale)
       .slice(0, 3);
 
     const challengeAreas = skillEvaluations
-      .filter(eval => eval.result === 'failure')
-      .map(eval => eval.rationale)
+      .filter(item => item.result === 'failure')
+      .map(item => item.rationale)
       .slice(0, 3);
 
     // 7. Generate score (based on success rate)
@@ -104,8 +104,8 @@ export async function processCompletedScenario(
       feedback,
       practice_metrics: {
         success_rate: successRate,
-        key_achievements,
-        challenge_areas
+        key_achievements: keyAchievements,
+        challenge_areas: challengeAreas
       }
     };
 
@@ -183,17 +183,17 @@ function generateFeedback(skillEvaluations: SkillEvaluation[], successRate: numb
   }
 
   // Add specific feedback for successful areas
-  const successfulEvals = skillEvaluations.filter(eval => eval.result === 'success');
+  const successfulEvals = skillEvaluations.filter(item => item.result === 'success');
   if (successfulEvals.length > 0) {
     feedback += 'Your strengths include: ';
-    feedback += successfulEvals.map(eval => eval.rationale.split('.')[0]).join('; ') + '. ';
+    feedback += successfulEvals.map(item => item.rationale.split('.')[0]).join('; ') + '. ';
   }
 
   // Add specific feedback for areas needing improvement
-  const improvementEvals = skillEvaluations.filter(eval => eval.result === 'failure');
+  const improvementEvals = skillEvaluations.filter(item => item.result === 'failure');
   if (improvementEvals.length > 0) {
     feedback += 'Areas to focus on: ';
-    feedback += improvementEvals.map(eval => eval.rationale.split('.')[0]).join('; ') + '.';
+    feedback += improvementEvals.map(item => item.rationale.split('.')[0]).join('; ') + '.';
   }
 
   return feedback;
